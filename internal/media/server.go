@@ -224,6 +224,7 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	cfg := s.cfg
 	cfg.UseLLM = true
 	cfg.UseLLMVision = true
+	cfg.UseLLMAudio = true
 
 	var request analyzeRequest
 	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
@@ -239,6 +240,7 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		cfg.VisionFrames = request.Frames
 	}
 	cfg.VisionMaxItems = len(request.SourcePaths)
+	cfg.AudioMaxItems = len(request.SourcePaths)
 	if err := validateConfig(cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -261,9 +263,10 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(max(1, cfg.LLMTimeoutSeconds*len(selected)))*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(max(1, cfg.LLMTimeoutSeconds*len(selected)*2))*time.Second)
 	defer cancel()
 	warnings := EnrichWithVision(ctx, cfg, selected)
+	warnings = append(warnings, EnrichWithAudio(ctx, cfg, selected)...)
 
 	s.mu.Lock()
 	for _, analyzed := range selected {

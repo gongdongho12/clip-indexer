@@ -615,6 +615,8 @@
           <span>Audio</span><strong>${escapeHtml(formatAudio(item.audio))}</strong>
           <span>Location</span><strong>${escapeHtml(formatLocation(item.location, item.content))}</strong>
           <span>Scene</span><strong>${escapeHtml(formatScene(item.content))}</strong>
+          <span>Audio clue</span><strong>${escapeHtml(formatAudioInsight(item.content))}</strong>
+          <span>Transcript</span><strong>${escapeHtml(formatTranscript(item.content))}</strong>
           <span>Tags</span><strong>${edit.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join(" ")}</strong>
         </div>
       `;
@@ -774,6 +776,17 @@
     function formatScene(content) {
       if (!content) return "-";
       return content.scene_summary || content.notes || "-";
+    }
+
+    function formatAudioInsight(content) {
+      if (!content) return "-";
+      return content.audio_summary || (content.audio_tags || []).join(", ") || "-";
+    }
+
+    function formatTranscript(content) {
+      if (!content?.audio_transcript) return "-";
+      const text = content.audio_transcript.trim();
+      return text.length > 220 ? `${text.slice(0, 220)}...` : text;
     }
 
     function escapeHtml(value) {

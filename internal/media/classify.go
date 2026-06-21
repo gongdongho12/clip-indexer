@@ -289,6 +289,10 @@ func contentTags(content *ContentInfo) []string {
 		return nil
 	}
 	tags := append([]string{}, content.Tags...)
+	tags = append(tags, content.AudioTags...)
+	if content.AudioTranscript != "" {
+		tags = append(tags, "speech")
+	}
 	if content.LocationGuess != "" && content.LocationConfidence >= 0.45 {
 		tags = append(tags, content.LocationGuess)
 	}

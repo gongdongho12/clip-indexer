@@ -101,8 +101,12 @@ func addIndexFlags(fs *flag.FlagSet, cfg *Config) {
 	fs.StringVar(&cfg.FFMpegPath, "ffmpeg", cfg.FFMpegPath, "path to ffmpeg executable for vision frame extraction")
 	fs.BoolVar(&cfg.UseLLM, "llm", cfg.UseLLM, "enrich tags and final filenames with an OpenAI-compatible chat endpoint")
 	fs.BoolVar(&cfg.UseLLMVision, "llm-vision", cfg.UseLLMVision, "sample video frames and ask the LLM for scene and location hints")
+	fs.BoolVar(&cfg.UseLLMAudio, "llm-audio", cfg.UseLLMAudio, "extract audio and ask the LLM for transcript, sound tags, and spoken context")
 	fs.IntVar(&cfg.VisionFrames, "vision-frames", cfg.VisionFrames, "number of frames to sample per video when --llm-vision is enabled")
 	fs.IntVar(&cfg.VisionMaxItems, "vision-max-items", cfg.VisionMaxItems, "maximum videos to analyze with --llm-vision; 0 means all")
+	fs.IntVar(&cfg.AudioMaxSeconds, "audio-max-seconds", cfg.AudioMaxSeconds, "maximum seconds of audio to transcribe per video when --llm-audio is enabled")
+	fs.IntVar(&cfg.AudioMaxItems, "audio-max-items", cfg.AudioMaxItems, "maximum videos to analyze with --llm-audio; 0 means all")
+	fs.StringVar(&cfg.AudioModel, "audio-model", cfg.AudioModel, "audio transcription model name")
 	fs.StringVar(&cfg.LLMBaseURL, "llm-base-url", cfg.LLMBaseURL, "LLM API base URL")
 	fs.StringVar(&cfg.LLMAPIKey, "llm-api-key", cfg.LLMAPIKey, "LLM API key")
 	fs.StringVar(&cfg.LLMModel, "llm-model", cfg.LLMModel, "LLM model name")
@@ -127,12 +131,15 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 		},
 		GeneratedAt: time.Now().Format(time.RFC3339),
 		Options: ReportOptions{
-			Recursive:      cfg.Recursive,
-			Trip:           cfg.Trip,
-			LLM:            cfg.UseLLM,
-			LLMVision:      cfg.UseLLMVision,
-			VisionFrames:   cfg.VisionFrames,
-			VisionMaxItems: cfg.VisionMaxItems,
+			Recursive:       cfg.Recursive,
+			Trip:            cfg.Trip,
+			LLM:             cfg.UseLLM,
+			LLMVision:       cfg.UseLLMVision,
+			LLMAudio:        cfg.UseLLMAudio,
+			VisionFrames:    cfg.VisionFrames,
+			VisionMaxItems:  cfg.VisionMaxItems,
+			AudioMaxSeconds: cfg.AudioMaxSeconds,
+			AudioMaxItems:   cfg.AudioMaxItems,
 		},
 		Warnings: append([]string{}, discoveryWarnings...),
 	}
@@ -158,13 +165,21 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 			report.Warnings = append(report.Warnings, warnings...)
 		}
 	}
+	if cfg.UseLLMAudio && len(report.Items) > 0 {
+		audioTimeout := time.Duration(max(1, cfg.LLMTimeoutSeconds*max(1, analysisItemCount(cfg.AudioMaxItems, len(report.Items))))) * time.Second
+		audioCtx, cancel := context.WithTimeout(ctx, audioTimeout)
+		defer cancel()
+		if warnings := EnrichWithAudio(audioCtx, cfg, report.Items); len(warnings) > 0 {
+			report.Warnings = append(report.Warnings, warnings...)
+		}
+	}
 
 	report.Summary = summarize(report.Items, len(paths), len(report.Warnings))
 	return report, nil
 }
 
 func validateConfig(cfg Config) error {
-	if cfg.UseLLMVision {
+	if cfg.UseLLMVision || cfg.UseLLMAudio {
 		cfg.UseLLM = true
 	}
 	if cfg.UseLLMVision {
@@ -173,6 +188,17 @@ func validateConfig(cfg Config) error {
 		}
 		if cfg.VisionMaxItems < 0 {
 			return errors.New("--vision-max-items must be 0 or greater")
+		}
+	}
+	if cfg.UseLLMAudio {
+		if cfg.AudioMaxSeconds < 1 {
+			return errors.New("--audio-max-seconds must be at least 1")
+		}
+		if cfg.AudioMaxItems < 0 {
+			return errors.New("--audio-max-items must be 0 or greater")
+		}
+		if strings.TrimSpace(cfg.AudioModel) == "" {
+			return errors.New("--llm-audio requires --audio-model or LLM_AUDIO_MODEL/OPENAI_AUDIO_MODEL")
 		}
 	}
 	if cfg.UseLLM {
@@ -187,8 +213,12 @@ func validateConfig(cfg Config) error {
 }
 
 func visionItemCount(cfg Config, itemCount int) int {
-	if cfg.VisionMaxItems > 0 && cfg.VisionMaxItems < itemCount {
-		return cfg.VisionMaxItems
+	return analysisItemCount(cfg.VisionMaxItems, itemCount)
+}
+
+func analysisItemCount(limit int, itemCount int) int {
+	if limit > 0 && limit < itemCount {
+		return limit
 	}
 	return itemCount
 }
@@ -201,6 +231,9 @@ func defaultConfig() Config {
 		Port:              envIntOr("CLIP_INDEXER_PORT", 4317),
 		VisionFrames:      envIntOr("CLIP_INDEXER_VISION_FRAMES", 2),
 		VisionMaxItems:    envIntOr("CLIP_INDEXER_VISION_MAX_ITEMS", 12),
+		AudioMaxSeconds:   envIntOr("CLIP_INDEXER_AUDIO_MAX_SECONDS", 45),
+		AudioMaxItems:     envIntOr("CLIP_INDEXER_AUDIO_MAX_ITEMS", 12),
+		AudioModel:        envOrAny("whisper-1", "LLM_AUDIO_MODEL", "OPENAI_AUDIO_MODEL"),
 		LLMBaseURL:        envOrAny("https://api.openai.com/v1", "LLM_BASE_URL", "OPENAI_BASE_URL"),
 		LLMAPIKey:         envOrAny("", "LLM_API_KEY", "OPENAI_API_KEY"),
 		LLMModel:          envOrAny("", "LLM_MODEL", "OPENAI_MODEL"),

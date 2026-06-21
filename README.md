@@ -65,7 +65,7 @@ The server prints a localhost URL. Open it in a browser to review:
 
 The UI can apply selected operations:
 
-- analyze selected videos with LLM vision when API credentials and a vision-capable model are configured
+- analyze selected videos with LLM vision/audio when API credentials, a vision-capable model, and an audio transcription model are configured
 - rename files in place
 - write a sidecar tag file next to the video: `video.mp4.clip-tags.json`
 - write macOS extended attributes under `com.clipatlas.tags`
@@ -107,7 +107,22 @@ go run ./cmd/clip-indexer \
 
 If GPS-like tags exist in the file metadata, the JSON includes a `location` object. DJI Pocket footage often stores metadata in proprietary tracks, so plain `ffprobe` may not expose coordinates. When GPS is absent, vision analysis can still provide a cautious `content.location_guess`, but it does not invent precise coordinates.
 
-In the web UI, select one or more rows and press **Analyze selected** to run the same vision analysis on demand. The result updates the in-memory report with `content`, `location`, and merged scene/place tags. It does not rename or write files unless you explicitly use the apply controls afterward.
+To also extract an audio sample, transcribe speech, and turn spoken clues into tags:
+
+```bash
+go run ./cmd/clip-indexer \
+  --pretty \
+  --llm-vision \
+  --llm-audio \
+  --audio-model whisper-1 \
+  --audio-max-seconds 45 \
+  --vision-max-items 5 \
+  --audio-max-items 5 \
+  --trip "Seoul 2026" \
+  ~/Movies/trip
+```
+
+In the web UI, select one or more rows and press **Analyze selected** to run frame and audio analysis on demand. The result updates the in-memory report with `content`, `location`, and merged scene/place/audio tags. It does not rename or write files unless you explicitly use the apply controls afterward.
 
 For a local or custom endpoint:
 

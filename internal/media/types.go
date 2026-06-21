@@ -11,8 +11,12 @@ type Config struct {
 	Port               int
 	UseLLM             bool
 	UseLLMVision       bool
+	UseLLMAudio        bool
 	VisionFrames       int
 	VisionMaxItems     int
+	AudioMaxSeconds    int
+	AudioMaxItems      int
+	AudioModel         string
 	LLMBaseURL         string
 	LLMAPIKey          string
 	LLMModel           string
@@ -35,12 +39,15 @@ type ServiceInfo struct {
 }
 
 type ReportOptions struct {
-	Recursive      bool   `json:"recursive"`
-	Trip           string `json:"trip,omitempty"`
-	LLM            bool   `json:"llm"`
-	LLMVision      bool   `json:"llm_vision"`
-	VisionFrames   int    `json:"vision_frames,omitempty"`
-	VisionMaxItems int    `json:"vision_max_items,omitempty"`
+	Recursive       bool   `json:"recursive"`
+	Trip            string `json:"trip,omitempty"`
+	LLM             bool   `json:"llm"`
+	LLMVision       bool   `json:"llm_vision"`
+	LLMAudio        bool   `json:"llm_audio"`
+	VisionFrames    int    `json:"vision_frames,omitempty"`
+	VisionMaxItems  int    `json:"vision_max_items,omitempty"`
+	AudioMaxSeconds int    `json:"audio_max_seconds,omitempty"`
+	AudioMaxItems   int    `json:"audio_max_items,omitempty"`
 }
 
 type Summary struct {
@@ -100,11 +107,16 @@ type LocationInfo struct {
 
 type ContentInfo struct {
 	SceneSummary       string   `json:"scene_summary,omitempty"`
+	AudioSummary       string   `json:"audio_summary,omitempty"`
+	AudioTranscript    string   `json:"audio_transcript,omitempty"`
 	LocationGuess      string   `json:"location_guess,omitempty"`
 	LocationConfidence float64  `json:"location_confidence,omitempty"`
 	Tags               []string `json:"tags,omitempty"`
+	AudioTags          []string `json:"audio_tags,omitempty"`
 	FrameCount         int      `json:"frame_count,omitempty"`
+	AudioSeconds       int      `json:"audio_seconds,omitempty"`
 	Model              string   `json:"model,omitempty"`
+	AudioModel         string   `json:"audio_model,omitempty"`
 	Notes              string   `json:"notes,omitempty"`
 }
 
