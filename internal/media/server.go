@@ -28,6 +28,8 @@ type webServer struct {
 	mu           sync.RWMutex
 	shutdown     chan struct{}
 	shutdownOnce sync.Once
+	clientMu     sync.Mutex
+	lastClient   time.Time
 }
 
 type applyRequest struct {
@@ -118,6 +120,7 @@ func (s *webServer) serve(stdout io.Writer) error {
 	mux.HandleFunc("/api/report", s.handleReport)
 	mux.HandleFunc("/api/apply", s.handleApply)
 	mux.HandleFunc("/api/analyze", s.handleAnalyze)
+	mux.HandleFunc("/api/ping", s.handlePing)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
 	mux.HandleFunc("/media", s.handleMedia)
 
@@ -133,6 +136,7 @@ func (s *webServer) serve(stdout io.Writer) error {
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	go s.watchClientIdle(20 * time.Second)
 	go func() {
 		<-s.shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -302,6 +306,15 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *webServer) handlePing(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.markClientSeen()
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
 func (s *webServer) applyOne(operation applyOperation) applyResult {
 	result := applyResult{
 		SourcePath: operation.SourcePath,
@@ -398,6 +411,34 @@ func (s *webServer) handleShutdown(w http.ResponseWriter, r *http.Request) {
 			close(s.shutdown)
 		})
 	}()
+}
+
+func (s *webServer) markClientSeen() {
+	s.clientMu.Lock()
+	s.lastClient = time.Now()
+	s.clientMu.Unlock()
+}
+
+func (s *webServer) watchClientIdle(timeout time.Duration) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.shutdown:
+			return
+		case <-ticker.C:
+			s.clientMu.Lock()
+			lastClient := s.lastClient
+			s.clientMu.Unlock()
+			if lastClient.IsZero() || time.Since(lastClient) < timeout {
+				continue
+			}
+			s.shutdownOnce.Do(func() {
+				close(s.shutdown)
+			})
+			return
+		}
+	}
 }
 
 func (s *webServer) handleMedia(w http.ResponseWriter, r *http.Request) {

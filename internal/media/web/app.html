@@ -241,7 +241,7 @@
 
     .file-cell {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr);
       gap: 8px;
       align-items: center;
     }
@@ -278,17 +278,23 @@
 
     .right {
       display: grid;
-      grid-template-rows: auto auto 1fr auto;
+      grid-template-rows: clamp(220px, 32vh, 360px) auto 1fr auto;
       gap: 0;
       background: #ffffff;
+      position: sticky;
+      top: 0;
+      height: 100%;
+      align-self: start;
+      overflow: hidden;
     }
 
     .preview {
       background: #101820;
-      min-height: 116px;
       display: grid;
-      place-items: center;
-      padding: 16px;
+      grid-template-rows: minmax(0, 1fr) auto;
+      min-height: 0;
+      overflow: hidden;
+      border-bottom: 1px solid #1f3039;
     }
 
     video {
@@ -304,15 +310,23 @@
       gap: 10px;
       justify-items: center;
       text-align: center;
+      place-self: center;
+      padding: 16px;
     }
 
     .preview-title {
       color: #eef5f7;
       font-weight: 700;
+      padding: 8px 12px 10px;
+      background: #101820;
       max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .preview-action {
+      display: none;
     }
 
     .modal {
@@ -459,6 +473,24 @@
 
       .right {
         border-top: 1px solid var(--line);
+        position: static;
+        height: auto;
+        max-height: none;
+        grid-template-rows: auto auto auto;
+      }
+
+      .preview {
+        display: none;
+      }
+
+      .preview-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .file-cell {
+        grid-template-columns: minmax(0, 1fr) auto;
       }
 
       .toolbar {
@@ -551,7 +583,8 @@
       edits: new Map(),
       activePath: "",
       showJson: false,
-      shuttingDown: false
+      shuttingDown: false,
+      heartbeatTimer: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -652,7 +685,7 @@
                 <div class="file-name" title="${escapeAttr(item.source_path)}">${escapeHtml(baseName(item.source_path))}</div>
                 <div class="path">${escapeHtml(dirName(item.source_path))}</div>
               </div>
-              <button data-action="preview">Preview</button>
+              <button class="preview-action" data-action="preview">Preview</button>
             </div>
           </td>
           <td>${escapeHtml(formatDate(item.shot_at))}</td>
@@ -681,8 +714,7 @@
         previewButton.addEventListener("click", (event) => {
           event.stopPropagation();
           state.activePath = key;
-          renderRows();
-          renderDetail();
+          render();
           openPreview(item);
         });
         tr.addEventListener("click", () => {
@@ -706,12 +738,9 @@
       }
       const edit = getEdit(item);
       preview.innerHTML = `
-        <div class="empty-preview">
-          <div class="preview-title">${escapeHtml(baseName(item.source_path))}</div>
-          <button id="openPreview">Open preview</button>
-        </div>
+        <video controls preload="metadata" src="/media?path=${encodeURIComponent(item.source_path)}"></video>
+        <div class="preview-title" title="${escapeAttr(item.source_path)}">${escapeHtml(baseName(item.source_path))}</div>
       `;
-      $("openPreview").addEventListener("click", () => openPreview(item));
       detail.innerHTML = `
         <h2>${escapeHtml(baseName(item.source_path))}</h2>
         <div class="meta-grid">
@@ -846,6 +875,18 @@
       log("Server shutdown requested", "ok");
     }
 
+    function pingServer() {
+      fetch("/api/ping", { method: "POST", keepalive: true }).catch(() => {});
+    }
+
+    function startHeartbeat() {
+      if (state.heartbeatTimer) {
+        clearInterval(state.heartbeatTimer);
+      }
+      pingServer();
+      state.heartbeatTimer = setInterval(pingServer, 5000);
+    }
+
     function openPreview(item) {
       $("modalTitle").textContent = baseName(item.source_path);
       $("modalBody").innerHTML = `<video controls autoplay preload="metadata" src="/media?path=${encodeURIComponent(item.source_path)}"></video>`;
@@ -963,10 +1004,11 @@
     });
     window.addEventListener("pagehide", () => {
       if (!state.shuttingDown) {
-        navigator.sendBeacon("/api/shutdown", "");
+        navigator.sendBeacon("/api/ping", "");
       }
     });
 
+    startHeartbeat();
     loadReport().catch((error) => log(error.message, "fail"));
   </script>
 </body>
