@@ -208,6 +208,74 @@ video.mp4.clip-analysis.json
 *.clip-tags.json
 ```
 
+## 태그 맵
+
+태그는 파일명/메타데이터에서 만든 기본 태그, LLM vision/audio 분석 태그, 위치 힌트를 합쳐서 만들어집니다. 이 통합 태그가 그룹 추천과 폴더 플래닝의 입력이 됩니다.
+
+```mermaid
+flowchart LR
+  Video["영상 파일"] --> Probe["ffprobe 메타데이터"]
+  Video --> Frames["ffmpeg 프레임 샘플"]
+  Video --> Sound["ffmpeg 오디오 샘플"]
+
+  Probe --> BaseTags["기본 태그\nvideo, dji, 4k, landscape, 60fps, morning"]
+  Probe --> ShotDate["촬영일\nfilename, metadata, filesystem"]
+  Probe --> GPS["GPS 메타데이터\n있으면 location"]
+
+  Frames --> VisionLLM["Vision LLM"]
+  Sound --> AudioLLM["Audio LLM"]
+
+  VisionLLM --> SceneTags["장면 태그\nstreet, train, food, hotel, beach"]
+  VisionLLM --> SceneText["장면 요약과 위치 추정"]
+  AudioLLM --> AudioTags["오디오 태그\nspeech, announcement, station"]
+  AudioLLM --> Transcript["음성 transcript와 오디오 요약"]
+  GPS --> LocationTags["위치 태그\nplace, city, country"]
+  SceneText --> LocationTags
+
+  BaseTags --> TagPool["통합 tags"]
+  SceneTags --> TagPool
+  AudioTags --> TagPool
+  LocationTags --> TagPool
+
+  TagPool --> Group["deterministic group"]
+  SceneText --> Group
+  Transcript --> Group
+
+  Group --> FolderPlan["folder planner\n기존 폴더 + LLM 계획"]
+  TagPool --> FolderPlan
+  ShotDate --> FolderPlan
+  FolderPlan --> Apply["Apply selected\nrename, move, sidecar, xattr"]
+```
+
+기본 그룹은 아래처럼 태그와 장면 요약을 기준으로 매칭됩니다. LLM 폴더 플래닝은 이 그룹을 그대로 쓰거나, 기존 하위 폴더 목록과 장면 정보를 보고 더 구체적인 상대 경로를 제안합니다.
+
+```mermaid
+flowchart TB
+  Tags["통합 tags + scene/audio/location text"] --> Airport["airport\nairport, terminal, flight, 공항, 비행기"]
+  Tags --> Train["train\ntrain, station, subway, 기차, 역, 지하철"]
+  Tags --> Transport["transport\nbus, taxi, car, ferry, 버스, 택시, 운전"]
+  Tags --> Food["food\nrestaurant, cafe, ramen, sushi, 식당, 카페, 음식"]
+  Tags --> Hotel["hotel\nhotel, room, lobby, 숙소, 객실"]
+  Tags --> Landmark["landmark\ntemple, shrine, castle, bridge, 박물관, 전망대"]
+  Tags --> Nature["nature\nbeach, sea, mountain, park, 바다, 산, 풍경"]
+  Tags --> Shopping["shopping\nshop, market, mall, 편의점, 시장"]
+  Tags --> City["city\nstreet, downtown, night_view, 거리, 야경, 산책"]
+  Tags --> People["people\nfamily, friend, portrait, 사람, 가족, 친구"]
+  Tags --> Other["other\n매칭되지 않은 클립"]
+
+  Airport --> PlannedFolder["계획된 폴더"]
+  Train --> PlannedFolder
+  Transport --> PlannedFolder
+  Food --> PlannedFolder
+  Hotel --> PlannedFolder
+  Landmark --> PlannedFolder
+  Nature --> PlannedFolder
+  Shopping --> PlannedFolder
+  City --> PlannedFolder
+  People --> PlannedFolder
+  Other --> PlannedFolder
+```
+
 ## 폴더 플래닝과 파일 이동
 
 Clip Atlas에는 두 가지 정리 방식이 있습니다.
