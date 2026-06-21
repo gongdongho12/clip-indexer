@@ -96,15 +96,15 @@
 
     .topbar {
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 16px;
+      grid-template-columns: minmax(220px, 1fr) auto minmax(0, auto);
+      gap: 14px;
       align-items: center;
       padding: 14px 18px;
       border-bottom: 1px solid var(--line);
       background: #ffffff;
       position: sticky;
       top: 0;
-      z-index: 6;
+      z-index: 12;
     }
 
     .brand {
@@ -126,6 +126,34 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .top-menu {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafb;
+    }
+
+    .top-menu button {
+      min-height: 30px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .top-menu button.active {
+      background: #ffffff;
+      color: var(--accent-strong);
+      box-shadow: 0 0 0 1px #c9d7de;
     }
 
     .stats {
@@ -167,7 +195,7 @@
 
     .toolbar {
       display: grid;
-      grid-template-columns: minmax(180px, 1fr) auto auto auto auto auto auto;
+      grid-template-columns: minmax(180px, 1fr) auto auto auto auto auto;
       gap: 10px;
       align-items: center;
       padding: 12px;
@@ -461,8 +489,11 @@
 
     .map-page {
       position: fixed;
-      inset: 0;
-      z-index: 30;
+      top: var(--topbar-height);
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 9;
       display: grid;
       grid-template-rows: auto 1fr;
       min-width: 0;
@@ -943,6 +974,14 @@
         font-size: 17px;
       }
 
+      .top-menu {
+        width: 100%;
+      }
+
+      .top-menu button {
+        flex: 1 1 0;
+      }
+
       .stats {
         flex-wrap: nowrap;
         justify-content: flex-start;
@@ -1128,7 +1167,7 @@
 
       .map-actions {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr;
       }
 
       .mind-map {
@@ -1182,6 +1221,10 @@
         <h1>Clip Atlas</h1>
         <span id="subtitle">Loading</span>
       </div>
+      <nav class="top-menu" aria-label="View navigation">
+        <button id="showFilesView" type="button">Files</button>
+        <button id="showTagMap" type="button">Tag map</button>
+      </nav>
       <div class="stats" id="stats"></div>
     </header>
 
@@ -1193,7 +1236,6 @@
           <button id="selectEveryFile" title="Select every indexed file">All files</button>
           <button id="clearSelection" title="Clear selected files">Clear</button>
           <button id="showJson" title="Toggle JSON panel">JSON</button>
-          <button id="showTagMap" title="Open tag map">Tag map</button>
           <button id="refresh" title="Reload current report">Reload</button>
         </div>
         <div class="table-wrap">
@@ -1260,7 +1302,6 @@
       </div>
       <div class="map-actions">
         <button id="copyMermaid">Copy Mermaid</button>
-        <button id="closeTagMap">Close</button>
       </div>
     </header>
     <div class="map-content">
@@ -1394,6 +1435,7 @@
       renderFolderPlan();
       renderJson();
       renderTagMap();
+      renderViewMenu();
     }
 
     function renderStats() {
@@ -1662,6 +1704,7 @@
     function renderTagMap() {
       const page = $("tagMapPage");
       page.hidden = !state.tagMapOpen;
+      renderViewMenu();
       if (!state.tagMapOpen) return;
 
       const items = state.report?.items || [];
@@ -1679,6 +1722,16 @@
 
       $("tagMapGraph").innerHTML = renderTagMapGraph(groups, items.length);
       $("mermaidSource").textContent = buildMermaidMindmap(groups, items.length);
+    }
+
+    function renderViewMenu() {
+      const filesButton = $("showFilesView");
+      const tagMapButton = $("showTagMap");
+      if (!filesButton || !tagMapButton) return;
+      filesButton.classList.toggle("active", !state.tagMapOpen);
+      tagMapButton.classList.toggle("active", state.tagMapOpen);
+      filesButton.setAttribute("aria-current", state.tagMapOpen ? "false" : "page");
+      tagMapButton.setAttribute("aria-current", state.tagMapOpen ? "page" : "false");
     }
 
     function renderTagMapGraph(groups, fileCount) {
@@ -1783,6 +1836,7 @@
     function closeTagMap() {
       state.tagMapOpen = false;
       $("tagMapPage").hidden = true;
+      renderViewMenu();
       if (location.hash === "#tag-map") {
         history.pushState(null, "", `${location.pathname}${location.search}`);
       }
@@ -2205,8 +2259,8 @@
       state.showJson = !state.showJson;
       renderJson();
     });
+    $("showFilesView").addEventListener("click", closeTagMap);
     $("showTagMap").addEventListener("click", openTagMap);
-    $("closeTagMap").addEventListener("click", closeTagMap);
     $("copyMermaid").addEventListener("click", copyMermaid);
     $("refresh").addEventListener("click", loadReport);
     $("analyze").addEventListener("click", analyzeSelected);
