@@ -105,7 +105,9 @@ func BuildTags(fileName string, shotAt time.Time, probe ProbeResult) []string {
 		add("silent")
 	}
 	if probe.Location != nil {
-		add("gps")
+		for _, tag := range locationTags(probe.Location) {
+			add(tag)
+		}
 	}
 	if durationTag := durationTag(probe.DurationSeconds); durationTag != "" {
 		add(durationTag)
@@ -262,6 +264,35 @@ func timeOfDayTag(t time.Time) string {
 	default:
 		return "night"
 	}
+}
+
+func locationTags(location *LocationInfo) []string {
+	if location == nil {
+		return nil
+	}
+	var tags []string
+	if location.Latitude != 0 || location.Longitude != 0 {
+		tags = append(tags, "gps")
+		tags = append(tags, fmt.Sprintf("geo_%.4f_%.4f", location.Latitude, location.Longitude))
+	}
+	if location.Label != "" {
+		tags = append(tags, location.Label)
+	}
+	if location.Notes != "" && location.Confidence >= 0.55 {
+		tags = append(tags, location.Notes)
+	}
+	return tags
+}
+
+func contentTags(content *ContentInfo) []string {
+	if content == nil {
+		return nil
+	}
+	tags := append([]string{}, content.Tags...)
+	if content.LocationGuess != "" && content.LocationConfidence >= 0.45 {
+		tags = append(tags, content.LocationGuess)
+	}
+	return tags
 }
 
 func buildNameParts(shotAt time.Time, trip string, tags []string, sequence int) NameParts {

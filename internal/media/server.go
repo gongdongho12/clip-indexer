@@ -117,6 +117,7 @@ func (s *webServer) serve(stdout io.Writer) error {
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/api/report", s.handleReport)
 	mux.HandleFunc("/api/apply", s.handleApply)
+	mux.HandleFunc("/api/analyze", s.handleAnalyze)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
 	mux.HandleFunc("/media", s.handleMedia)
 
@@ -200,6 +201,89 @@ func (s *webServer) handleApply(w http.ResponseWriter, r *http.Request) {
 	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
 	response.Report = s.report
 	writeJSON(w, response)
+}
+
+type analyzeRequest struct {
+	SourcePaths []string `json:"source_paths"`
+	Frames      int      `json:"frames,omitempty"`
+}
+
+type analyzeResponse struct {
+	Analyzed int      `json:"analyzed"`
+	Warnings []string `json:"warnings,omitempty"`
+	Report   Report   `json:"report"`
+}
+
+func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	cfg := s.cfg
+	cfg.UseLLM = true
+	cfg.UseLLMVision = true
+
+	var request analyzeRequest
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	if err := decoder.Decode(&request); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(request.SourcePaths) == 0 {
+		http.Error(w, "select at least one file to analyze", http.StatusBadRequest)
+		return
+	}
+	if request.Frames > 0 {
+		cfg.VisionFrames = request.Frames
+	}
+	cfg.VisionMaxItems = len(request.SourcePaths)
+	if err := validateConfig(cfg); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.mu.RLock()
+	selected := make([]Item, 0, len(request.SourcePaths))
+	for _, sourcePath := range request.SourcePaths {
+		index := slices.IndexFunc(s.report.Items, func(item Item) bool {
+			return item.SourcePath == sourcePath
+		})
+		if index >= 0 {
+			selected = append(selected, s.report.Items[index])
+		}
+	}
+	s.mu.RUnlock()
+
+	if len(selected) == 0 {
+		http.Error(w, "selected files are not part of the current report", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(max(1, cfg.LLMTimeoutSeconds*len(selected)))*time.Second)
+	defer cancel()
+	warnings := EnrichWithVision(ctx, cfg, selected)
+
+	s.mu.Lock()
+	for _, analyzed := range selected {
+		index := slices.IndexFunc(s.report.Items, func(item Item) bool {
+			return item.SourcePath == analyzed.SourcePath
+		})
+		if index >= 0 {
+			s.report.Items[index] = analyzed
+		}
+	}
+	s.report.Warnings = append(s.report.Warnings, warnings...)
+	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	report := s.report
+	s.mu.Unlock()
+
+	writeJSON(w, analyzeResponse{
+		Analyzed: len(selected),
+		Warnings: warnings,
+		Report:   report,
+	})
 }
 
 func (s *webServer) applyOne(operation applyOperation) applyResult {

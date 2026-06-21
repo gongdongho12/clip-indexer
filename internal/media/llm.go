@@ -122,7 +122,9 @@ func EnrichWithLLM(ctx context.Context, cfg Config, items []Item) []string {
 			}
 			item.Location.Label = strings.TrimSpace(suggestion.LocationLabel)
 			item.Location.Notes = strings.TrimSpace(suggestion.LocationGuess)
+			item.Tags = mergeTagList(item.Tags, locationTags(item.Location))
 		}
+		item.Tags = mergeTagList(item.Tags, contentTags(item.Content))
 		if suggestion.SuggestedSlug != "" {
 			item.NameParts.Slug = slugify(suggestion.SuggestedSlug)
 		}

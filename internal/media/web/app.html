@@ -340,7 +340,7 @@
 
     .ops-actions {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
     }
 
@@ -445,6 +445,7 @@
           <label class="switch"><input id="writeSidecar" type="checkbox"> Write sidecar tag JSON</label>
           <label class="switch"><input id="writeXattr" type="checkbox"> Write macOS xattr tags</label>
           <div class="ops-actions">
+            <button id="analyze">Analyze selected</button>
             <button class="primary" id="apply">Apply selected</button>
             <button class="danger" id="shutdown">Stop server</button>
           </div>
@@ -684,6 +685,45 @@
       }
     }
 
+    async function analyzeSelected() {
+      const sourcePaths = (state.report?.items || [])
+        .filter((item) => state.selected.has(item.source_path))
+        .map((item) => item.source_path);
+      if (sourcePaths.length === 0) {
+        log("Select at least one file", "warn");
+        return;
+      }
+      $("analyze").disabled = true;
+      try {
+        log(`Analyzing ${sourcePaths.length} file(s)`, "warn");
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source_paths: sourcePaths })
+        });
+        const text = await response.text();
+        let payload = {};
+        try {
+          payload = text ? JSON.parse(text) : {};
+        } catch {
+          payload = { error: text };
+        }
+        if (!response.ok) {
+          throw new Error(payload.error || payload.message || text || response.statusText);
+        }
+        state.report = payload.report;
+        state.selected.clear();
+        state.edits.clear();
+        state.activePath = state.report.items?.[0]?.source_path || "";
+        render();
+        log(`Analyzed ${payload.analyzed} file(s)`, payload.warnings?.length ? "warn" : "ok");
+      } catch (error) {
+        log(error.message, "fail");
+      } finally {
+        $("analyze").disabled = false;
+      }
+    }
+
     function shutdown() {
       state.shuttingDown = true;
       fetch("/api/shutdown", { method: "POST", keepalive: true }).catch(() => {});
@@ -763,6 +803,7 @@
       renderJson();
     });
     $("refresh").addEventListener("click", loadReport);
+    $("analyze").addEventListener("click", analyzeSelected);
     $("apply").addEventListener("click", applySelected);
     $("shutdown").addEventListener("click", shutdown);
     window.addEventListener("pagehide", () => {

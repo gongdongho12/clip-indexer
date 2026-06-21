@@ -79,3 +79,20 @@ func TestSlugifyPreservesKoreanTags(t *testing.T) {
 		t.Fatalf("unexpected slug: %s", got)
 	}
 }
+
+func TestBuildTagsIncludesLocationTags(t *testing.T) {
+	tags := BuildTags("clip.mp4", time.Time{}, ProbeResult{
+		Tags: map[string]string{},
+		Location: &LocationInfo{
+			Latitude:  37.5665,
+			Longitude: 126.978,
+			Label:     "서울 시청",
+			Source:    "test",
+		},
+	})
+	for _, expected := range []string{"gps", "geo_37_5665_126_9780", "서울_시청"} {
+		if !slices.Contains(tags, expected) {
+			t.Fatalf("expected tag %q in %v", expected, tags)
+		}
+	}
+}

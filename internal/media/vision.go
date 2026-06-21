@@ -116,7 +116,7 @@ func analyzeItemWithVision(ctx context.Context, cfg Config, item Item) (*visionI
 		"messages": []map[string]any{
 			{
 				"role":    "system",
-				"content": "You analyze travel video frames. Infer visible scene content, useful concise tags, and a cautious location guess if landmarks, signs, transit names, coastline, mountains, buildings, or other visual clues support it. Do not invent precise coordinates. Return only JSON: {\"items\":[{\"source_path\":\"...\",\"tags\":[\"...\"],\"scene_summary\":\"...\",\"location_guess\":\"...\",\"location_confidence\":0.0,\"location_label\":\"...\",\"suggested_slug\":\"...\",\"final_file_name\":\"...\",\"notes\":\"...\"}]}",
+				"content": "You analyze travel video frames. Infer visible scene content, useful concise tags, and a cautious location guess if landmarks, signs, transit names, coastline, mountains, buildings, or other visual clues support it. Include scene/activity tags such as street, restaurant, hotel, airport, train, beach, mountain, night_view, walking, driving, food, people, indoor, outdoor. If a place is visually identifiable, include location_label and also include that place name in tags. Do not invent precise coordinates. Return only JSON: {\"items\":[{\"source_path\":\"...\",\"tags\":[\"...\"],\"scene_summary\":\"...\",\"location_guess\":\"...\",\"location_confidence\":0.0,\"location_label\":\"...\",\"suggested_slug\":\"...\",\"final_file_name\":\"...\",\"notes\":\"...\"}]}",
 			},
 			{
 				"role":    "user",
@@ -147,7 +147,14 @@ func analyzeItemWithVision(ctx context.Context, cfg Config, item Item) (*visionI
 }
 
 func applyVisionOutput(item *Item, suggestion visionItemOutput, frameCount int, model string) {
-	item.Tags = mergeTagList(item.Tags, suggestion.Tags)
+	derivedTags := append([]string{}, suggestion.Tags...)
+	if suggestion.LocationLabel != "" {
+		derivedTags = append(derivedTags, suggestion.LocationLabel)
+	}
+	if suggestion.LocationGuess != "" && suggestion.LocationConfidence >= 0.45 {
+		derivedTags = append(derivedTags, suggestion.LocationGuess)
+	}
+	item.Tags = mergeTagList(item.Tags, derivedTags)
 	if suggestion.LocationLabel != "" {
 		if item.Location == nil {
 			item.Location = &LocationInfo{
@@ -157,6 +164,7 @@ func applyVisionOutput(item *Item, suggestion visionItemOutput, frameCount int, 
 		}
 		item.Location.Label = strings.TrimSpace(suggestion.LocationLabel)
 		item.Location.Notes = strings.TrimSpace(suggestion.LocationGuess)
+		item.Tags = mergeTagList(item.Tags, locationTags(item.Location))
 	}
 	item.Content = &ContentInfo{
 		SceneSummary:       strings.TrimSpace(suggestion.SceneSummary),
@@ -167,6 +175,7 @@ func applyVisionOutput(item *Item, suggestion visionItemOutput, frameCount int, 
 		Model:              model,
 		Notes:              strings.TrimSpace(suggestion.Notes),
 	}
+	item.Tags = mergeTagList(item.Tags, contentTags(item.Content))
 	if suggestion.SuggestedSlug != "" {
 		item.NameParts.Slug = slugify(suggestion.SuggestedSlug)
 		item.FinalFileName = buildFileName(item.NameParts, item.Extension)
