@@ -139,6 +139,14 @@ go run ./cmd/clip-indexer serve \
 
 While analysis is running, the server command renders a terminal progress bar and the web file list shows row-level states such as `Queued`, `Analyzing`, `Warning`, and `Analyzed`.
 
+Successful analysis is cached next to each video as:
+
+```text
+video.mp4.clip-analysis.json
+```
+
+When the same folder is opened again, Clip Atlas loads that cache before calling an LLM, so previously analyzed scene summaries, location guesses, tags, and suggested final filenames appear immediately. Stale caches are skipped when the original filename, shot date, or duration no longer matches the video.
+
 For low-cost Gemini vision analysis through Google's OpenAI-compatible endpoint:
 
 ```bash

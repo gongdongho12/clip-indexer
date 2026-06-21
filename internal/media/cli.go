@@ -149,6 +149,7 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 	for index, path := range paths {
 		probe := Probe(ctx, cfg.FFProbePath, path)
 		item := BuildItem(path, index+1, cfg.Trip, probe)
+		report.Warnings = append(report.Warnings, applyAnalysisCache(&item)...)
 		report.Items = append(report.Items, item)
 	}
 
@@ -174,6 +175,9 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 		if warnings := EnrichWithAudio(audioCtx, cfg, report.Items); len(warnings) > 0 {
 			report.Warnings = append(report.Warnings, warnings...)
 		}
+	}
+	if cfg.UseLLM || cfg.UseLLMVision || cfg.UseLLMAudio {
+		report.Warnings = append(report.Warnings, saveAnalysisCaches(report.Items)...)
 	}
 
 	report.Summary = summarize(report.Items, len(paths), len(report.Warnings))

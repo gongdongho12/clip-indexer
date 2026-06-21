@@ -143,6 +143,7 @@ func runServe(args []string, stdout, stderr io.Writer, envWarnings []string) err
 func (s *webServer) serve(stdout io.Writer) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
+	mux.HandleFunc("/favicon.svg", s.handleFavicon)
 	mux.HandleFunc("/api/report", s.handleReport)
 	mux.HandleFunc("/api/apply", s.handleApply)
 	mux.HandleFunc("/api/analyze", s.handleAnalyze)
@@ -192,6 +193,20 @@ func (s *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(data)
+}
+
+func (s *webServer) handleFavicon(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	data, err := webFiles.ReadFile("web/favicon.svg")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "image/svg+xml")
 	_, _ = w.Write(data)
 }
 
@@ -489,6 +504,13 @@ func (s *webServer) analyzeSourcePath(ctx context.Context, cfg Config, sourcePat
 	s.report.Options.AudioMaxSeconds = cfg.AudioMaxSeconds
 	s.report.Options.AudioMaxItems = options.MaxItems
 	s.report.Warnings = append(s.report.Warnings, warnings...)
+	if selected[0].Content != nil || selected[0].Location != nil {
+		if err := saveAnalysisCache(selected[0]); err != nil {
+			warning := fmt.Sprintf("analysis cache write failed for %s: %v", sourcePath, err)
+			warnings = append(warnings, warning)
+			s.report.Warnings = append(s.report.Warnings, warning)
+		}
+	}
 	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
 	if selected[0].Content != nil || selected[0].Location != nil {
 		return warnings, 1

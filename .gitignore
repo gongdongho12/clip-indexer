@@ -23,6 +23,8 @@
 *.out
 *.prof
 coverage.*
+*.clip-analysis.json
+*.clip-tags.json
 
 # Editors
 /.vscode/
