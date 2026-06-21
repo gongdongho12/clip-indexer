@@ -407,6 +407,46 @@
       overflow-wrap: anywhere;
     }
 
+    .analysis-status {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 8px;
+      background: #fbfdfd;
+    }
+
+    .analysis-status[hidden] {
+      display: none;
+    }
+
+    .analysis-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .analysis-line strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .progress {
+      height: 6px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e6ecef;
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: var(--accent);
+    }
+
     .ops {
       padding: 14px;
       border-bottom: 1px solid var(--line);
@@ -561,6 +601,7 @@
       <aside class="right">
         <div class="preview" id="preview"></div>
         <section class="detail" id="detail"></section>
+        <section class="analysis-status" id="analysisStatus" hidden></section>
         <section class="ops">
           <h2>Apply</h2>
           <label class="switch"><input id="renameFiles" type="checkbox"> Rename selected files</label>
@@ -595,7 +636,9 @@
       activePath: "",
       showJson: false,
       shuttingDown: false,
-      heartbeatTimer: null
+      heartbeatTimer: null,
+      analysisStatus: null,
+      analysisPollTimer: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -660,10 +703,30 @@
       log(`Loaded ${state.report.summary.files_indexed} files`, "ok");
     }
 
+    async function loadAnalysisStatus() {
+      try {
+        const wasRunning = Boolean(state.analysisStatus?.running);
+        const response = await fetch("/api/analysis-status");
+        state.analysisStatus = await response.json();
+        renderAnalysisStatus();
+        if (wasRunning && !state.analysisStatus.running) {
+          await loadReport();
+          if (state.analysisStatus.error) {
+            log(state.analysisStatus.error, "fail");
+          } else {
+            log(`Automatic analysis finished: ${state.analysisStatus.updated || 0} updated`, state.analysisStatus.warnings?.length ? "warn" : "ok");
+          }
+        }
+      } catch (error) {
+        log(error.message, "fail");
+      }
+    }
+
     function render() {
       renderStats();
       renderRows();
       renderDetail();
+      renderAnalysisStatus();
       renderJson();
     }
 
@@ -784,6 +847,35 @@
       $("json").textContent = JSON.stringify(cloned, null, 2);
     }
 
+    function renderAnalysisStatus() {
+      const status = state.analysisStatus;
+      const panel = $("analysisStatus");
+      if (!status || (!status.enabled && !status.running && !status.error && !status.requested)) {
+        panel.hidden = true;
+        panel.innerHTML = "";
+        return;
+      }
+      panel.hidden = false;
+      const requested = status.requested || 0;
+      const analyzed = status.analyzed || 0;
+      const percent = requested > 0 ? Math.round((analyzed / requested) * 100) : 100;
+      const stateText = status.running
+        ? `Analyzing ${analyzed}/${requested}`
+        : status.error
+          ? "Analysis stopped"
+          : requested > 0
+            ? `Analyzed ${analyzed}/${requested}`
+            : "No pending analysis";
+      const warningText = status.warnings?.length ? status.warnings[0] : "";
+      panel.innerHTML = `
+        <div class="analysis-line"><strong>Analysis</strong><span>${escapeHtml(stateText)}</span></div>
+        <div class="progress"><span style="width:${Math.max(0, Math.min(100, percent))}%"></span></div>
+        ${status.updated ? `<div class="analysis-line"><span>Updated</span><strong>${status.updated}</strong></div>` : ""}
+        ${status.error ? `<div class="analysis-line fail"><span>Error</span><strong>${escapeHtml(status.error)}</strong></div>` : ""}
+        ${warningText ? `<div class="analysis-line warn"><span>Warning</span><strong>${escapeHtml(trimText(warningText, 160))}</strong></div>` : ""}
+      `;
+    }
+
     function selectedOperations() {
       const rename = $("renameFiles").checked;
       const writeSidecar = $("writeSidecar").checked;
@@ -869,6 +961,7 @@
           ? nextActivePath
           : state.report.items?.[0]?.source_path || "";
         render();
+        loadAnalysisStatus();
         log(`Analyzed ${payload.analyzed} file(s), updated ${payload.updated || 0}`, payload.warnings?.length ? "warn" : "ok");
         if (payload.warnings?.length) {
           log(payload.warnings[0], "warn");
@@ -896,6 +989,14 @@
       }
       pingServer();
       state.heartbeatTimer = setInterval(pingServer, 5000);
+    }
+
+    function startAnalysisPolling() {
+      if (state.analysisPollTimer) {
+        clearInterval(state.analysisPollTimer);
+      }
+      loadAnalysisStatus();
+      state.analysisPollTimer = setInterval(loadAnalysisStatus, 5000);
     }
 
     function syncLayoutMetrics() {
@@ -969,7 +1070,7 @@
     function formatTranscript(content) {
       if (!content?.audio_transcript) return "-";
       const text = content.audio_transcript.trim();
-      return text.length > 220 ? `${text.slice(0, 220)}...` : text;
+      return trimText(text, 220);
     }
 
     function formatAnalysis(item) {
@@ -994,6 +1095,11 @@
 
     function escapeAttr(value) {
       return escapeHtml(value).replace(/`/g, "&#96;");
+    }
+
+    function trimText(value, length) {
+      const text = String(value ?? "").trim();
+      return text.length > length ? `${text.slice(0, length)}...` : text;
     }
 
     $("filter").addEventListener("input", renderRows);
@@ -1028,6 +1134,7 @@
 
     syncLayoutMetrics();
     startHeartbeat();
+    startAnalysisPolling();
     loadReport().catch((error) => log(error.message, "fail"));
   </script>
 </body>

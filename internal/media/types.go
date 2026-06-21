@@ -1,26 +1,28 @@
 package media
 
 type Config struct {
-	Recursive          bool
-	Pretty             bool
-	IncludeUnsupported bool
-	Trip               string
-	FFProbePath        string
-	FFMpegPath         string
-	Host               string
-	Port               int
-	UseLLM             bool
-	UseLLMVision       bool
-	UseLLMAudio        bool
-	VisionFrames       int
-	VisionMaxItems     int
-	AudioMaxSeconds    int
-	AudioMaxItems      int
-	AudioModel         string
-	LLMBaseURL         string
-	LLMAPIKey          string
-	LLMModel           string
-	LLMTimeoutSeconds  int
+	Recursive           bool
+	Pretty              bool
+	IncludeUnsupported  bool
+	Trip                string
+	FFProbePath         string
+	FFMpegPath          string
+	Host                string
+	Port                int
+	UseLLM              bool
+	UseLLMVision        bool
+	UseLLMAudio         bool
+	AutoAnalyze         bool
+	AutoAnalyzeMaxItems int
+	VisionFrames        int
+	VisionMaxItems      int
+	AudioMaxSeconds     int
+	AudioMaxItems       int
+	AudioModel          string
+	LLMBaseURL          string
+	LLMAPIKey           string
+	LLMModel            string
+	LLMTimeoutSeconds   int
 }
 
 type Report struct {
@@ -39,15 +41,17 @@ type ServiceInfo struct {
 }
 
 type ReportOptions struct {
-	Recursive       bool   `json:"recursive"`
-	Trip            string `json:"trip,omitempty"`
-	LLM             bool   `json:"llm"`
-	LLMVision       bool   `json:"llm_vision"`
-	LLMAudio        bool   `json:"llm_audio"`
-	VisionFrames    int    `json:"vision_frames,omitempty"`
-	VisionMaxItems  int    `json:"vision_max_items,omitempty"`
-	AudioMaxSeconds int    `json:"audio_max_seconds,omitempty"`
-	AudioMaxItems   int    `json:"audio_max_items,omitempty"`
+	Recursive           bool   `json:"recursive"`
+	Trip                string `json:"trip,omitempty"`
+	LLM                 bool   `json:"llm"`
+	LLMVision           bool   `json:"llm_vision"`
+	LLMAudio            bool   `json:"llm_audio"`
+	AutoAnalyze         bool   `json:"auto_analyze"`
+	AutoAnalyzeMaxItems int    `json:"auto_analyze_max_items,omitempty"`
+	VisionFrames        int    `json:"vision_frames,omitempty"`
+	VisionMaxItems      int    `json:"vision_max_items,omitempty"`
+	AudioMaxSeconds     int    `json:"audio_max_seconds,omitempty"`
+	AudioMaxItems       int    `json:"audio_max_items,omitempty"`
 }
 
 type Summary struct {

@@ -131,15 +131,17 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 		},
 		GeneratedAt: time.Now().Format(time.RFC3339),
 		Options: ReportOptions{
-			Recursive:       cfg.Recursive,
-			Trip:            cfg.Trip,
-			LLM:             cfg.UseLLM,
-			LLMVision:       cfg.UseLLMVision,
-			LLMAudio:        cfg.UseLLMAudio,
-			VisionFrames:    cfg.VisionFrames,
-			VisionMaxItems:  cfg.VisionMaxItems,
-			AudioMaxSeconds: cfg.AudioMaxSeconds,
-			AudioMaxItems:   cfg.AudioMaxItems,
+			Recursive:           cfg.Recursive,
+			Trip:                cfg.Trip,
+			LLM:                 cfg.UseLLM,
+			LLMVision:           cfg.UseLLMVision,
+			LLMAudio:            cfg.UseLLMAudio,
+			AutoAnalyze:         cfg.AutoAnalyze,
+			AutoAnalyzeMaxItems: cfg.AutoAnalyzeMaxItems,
+			VisionFrames:        cfg.VisionFrames,
+			VisionMaxItems:      cfg.VisionMaxItems,
+			AudioMaxSeconds:     cfg.AudioMaxSeconds,
+			AudioMaxItems:       cfg.AudioMaxItems,
 		},
 		Warnings: append([]string{}, discoveryWarnings...),
 	}
@@ -225,19 +227,21 @@ func analysisItemCount(limit int, itemCount int) int {
 
 func defaultConfig() Config {
 	return Config{
-		FFProbePath:       envOr("FFPROBE_PATH", "ffprobe"),
-		FFMpegPath:        envOr("FFMPEG_PATH", "ffmpeg"),
-		Host:              envOr("CLIP_INDEXER_HOST", "127.0.0.1"),
-		Port:              envIntOr("CLIP_INDEXER_PORT", 4317),
-		VisionFrames:      envIntOr("CLIP_INDEXER_VISION_FRAMES", 2),
-		VisionMaxItems:    envIntOr("CLIP_INDEXER_VISION_MAX_ITEMS", 12),
-		AudioMaxSeconds:   envIntOr("CLIP_INDEXER_AUDIO_MAX_SECONDS", 45),
-		AudioMaxItems:     envIntOr("CLIP_INDEXER_AUDIO_MAX_ITEMS", 12),
-		AudioModel:        envOrAny("whisper-1", "LLM_AUDIO_MODEL", "OPENAI_AUDIO_MODEL"),
-		LLMBaseURL:        envOrAny("https://api.openai.com/v1", "LLM_BASE_URL", "OPENAI_BASE_URL"),
-		LLMAPIKey:         envOrAny("", "LLM_API_KEY", "OPENAI_API_KEY"),
-		LLMModel:          envOrAny("", "LLM_MODEL", "OPENAI_MODEL"),
-		LLMTimeoutSeconds: 30,
+		FFProbePath:         envOr("FFPROBE_PATH", "ffprobe"),
+		FFMpegPath:          envOr("FFMPEG_PATH", "ffmpeg"),
+		Host:                envOr("CLIP_INDEXER_HOST", "127.0.0.1"),
+		Port:                envIntOr("CLIP_INDEXER_PORT", 4317),
+		AutoAnalyze:         envBoolOr("CLIP_INDEXER_AUTO_ANALYZE", false),
+		AutoAnalyzeMaxItems: envIntOr("CLIP_INDEXER_AUTO_ANALYZE_MAX_ITEMS", 3),
+		VisionFrames:        envIntOr("CLIP_INDEXER_VISION_FRAMES", 2),
+		VisionMaxItems:      envIntOr("CLIP_INDEXER_VISION_MAX_ITEMS", 12),
+		AudioMaxSeconds:     envIntOr("CLIP_INDEXER_AUDIO_MAX_SECONDS", 45),
+		AudioMaxItems:       envIntOr("CLIP_INDEXER_AUDIO_MAX_ITEMS", 12),
+		AudioModel:          envOrAny("whisper-1", "LLM_AUDIO_MODEL", "OPENAI_AUDIO_MODEL"),
+		LLMBaseURL:          envOrAny("https://api.openai.com/v1", "LLM_BASE_URL", "OPENAI_BASE_URL"),
+		LLMAPIKey:           envOrAny("", "LLM_API_KEY", "OPENAI_API_KEY"),
+		LLMModel:            envOrAny("", "LLM_MODEL", "OPENAI_MODEL"),
+		LLMTimeoutSeconds:   30,
 	}
 }
 
@@ -256,6 +260,18 @@ func envIntOr(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func envBoolOr(key string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch value {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
+	default:
+		return fallback
+	}
 }
 
 func envOrAny(fallback string, keys ...string) string {

@@ -124,6 +124,18 @@ go run ./cmd/clip-indexer \
 
 In the web UI, select one or more rows and press **Analyze selected** to run frame and audio analysis on demand. The result updates the in-memory report with `content`, `location`, and merged scene/place/audio tags. It does not rename or write files unless you explicitly use the apply controls afterward.
 
+To start automatic background analysis when the web UI launches:
+
+```bash
+go run ./cmd/clip-indexer serve \
+  --auto-analyze \
+  --auto-analyze-max-items 3 \
+  --trip "Seoul 2026" \
+  ~/Movies/trip
+```
+
+`--auto-analyze-max-items 0` analyzes every pending file. The default limit is intentionally small because frame/audio analysis sends media samples to the configured LLM provider and may consume API quota.
+
 For a local or custom endpoint:
 
 ```bash

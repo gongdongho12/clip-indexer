@@ -23,13 +23,27 @@ import (
 var webFiles embed.FS
 
 type webServer struct {
-	cfg          Config
-	report       Report
-	mu           sync.RWMutex
-	shutdown     chan struct{}
-	shutdownOnce sync.Once
-	clientMu     sync.Mutex
-	lastClient   time.Time
+	cfg            Config
+	report         Report
+	mu             sync.RWMutex
+	shutdown       chan struct{}
+	shutdownOnce   sync.Once
+	clientMu       sync.Mutex
+	lastClient     time.Time
+	analysisMu     sync.RWMutex
+	analysisStatus analysisStatus
+}
+
+type analysisStatus struct {
+	Enabled    bool     `json:"enabled"`
+	Running    bool     `json:"running"`
+	Requested  int      `json:"requested"`
+	Analyzed   int      `json:"analyzed"`
+	Updated    int      `json:"updated"`
+	Warnings   []string `json:"warnings,omitempty"`
+	Error      string   `json:"error,omitempty"`
+	StartedAt  string   `json:"started_at,omitempty"`
+	FinishedAt string   `json:"finished_at,omitempty"`
 }
 
 type applyRequest struct {
@@ -85,6 +99,8 @@ func runServe(args []string, stdout, stderr io.Writer, envWarnings []string) err
 	addIndexFlags(fs, &cfg)
 	fs.StringVar(&cfg.Host, "host", cfg.Host, "web server host")
 	fs.IntVar(&cfg.Port, "port", cfg.Port, "web server port, use 0 for a random free port")
+	fs.BoolVar(&cfg.AutoAnalyze, "auto-analyze", cfg.AutoAnalyze, "automatically analyze files with missing content after the web UI starts")
+	fs.IntVar(&cfg.AutoAnalyzeMaxItems, "auto-analyze-max-items", cfg.AutoAnalyzeMaxItems, "maximum files to auto analyze on server start; 0 means all")
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: %s serve [flags] <video-file-or-directory>...\n\n", cliName)
 		fmt.Fprintln(stderr, "Launches a local file-manager web UI for reviewing names and tags.")
@@ -98,6 +114,9 @@ func runServe(args []string, stdout, stderr io.Writer, envWarnings []string) err
 		fs.Usage()
 		return errors.New("at least one file or directory is required")
 	}
+	if cfg.AutoAnalyzeMaxItems < 0 {
+		return errors.New("--auto-analyze-max-items must be 0 or greater")
+	}
 
 	report, err := BuildReport(context.Background(), cfg, fs.Args())
 	if err != nil {
@@ -107,9 +126,10 @@ func runServe(args []string, stdout, stderr io.Writer, envWarnings []string) err
 	report.Summary = summarize(report.Items, report.Summary.FilesDiscovered, len(report.Warnings))
 
 	app := &webServer{
-		cfg:      cfg,
-		report:   report,
-		shutdown: make(chan struct{}),
+		cfg:            cfg,
+		report:         report,
+		shutdown:       make(chan struct{}),
+		analysisStatus: analysisStatus{Enabled: cfg.AutoAnalyze},
 	}
 	return app.serve(stdout)
 }
@@ -120,6 +140,7 @@ func (s *webServer) serve(stdout io.Writer) error {
 	mux.HandleFunc("/api/report", s.handleReport)
 	mux.HandleFunc("/api/apply", s.handleApply)
 	mux.HandleFunc("/api/analyze", s.handleAnalyze)
+	mux.HandleFunc("/api/analysis-status", s.handleAnalysisStatus)
 	mux.HandleFunc("/api/ping", s.handlePing)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
 	mux.HandleFunc("/media", s.handleMedia)
@@ -137,6 +158,9 @@ func (s *webServer) serve(stdout io.Writer) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go s.watchClientIdle(20 * time.Second)
+	if s.cfg.AutoAnalyze {
+		go s.runAutoAnalyze(context.Background())
+	}
 	go func() {
 		<-s.shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -241,6 +265,10 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "select at least one file to analyze", http.StatusBadRequest)
 		return
 	}
+	if s.analysisIsRunning() {
+		http.Error(w, "automatic analysis is already running", http.StatusConflict)
+		return
+	}
 	if request.Frames > 0 {
 		cfg.VisionFrames = request.Frames
 	}
@@ -304,6 +332,170 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		Warnings: warnings,
 		Report:   report,
 	})
+}
+
+func (s *webServer) handleAnalysisStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.analysisMu.RLock()
+	status := s.analysisStatus
+	status.Warnings = append([]string{}, s.analysisStatus.Warnings...)
+	s.analysisMu.RUnlock()
+	writeJSON(w, status)
+}
+
+func (s *webServer) runAutoAnalyze(ctx context.Context) {
+	paths := s.pendingAnalysisPaths()
+	if s.cfg.AutoAnalyzeMaxItems > 0 && len(paths) > s.cfg.AutoAnalyzeMaxItems {
+		paths = paths[:s.cfg.AutoAnalyzeMaxItems]
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	s.analysisMu.Lock()
+	s.analysisStatus = analysisStatus{
+		Enabled:   true,
+		Running:   len(paths) > 0,
+		Requested: len(paths),
+		StartedAt: now,
+	}
+	if len(paths) == 0 {
+		s.analysisStatus.FinishedAt = now
+	}
+	s.analysisMu.Unlock()
+	if len(paths) == 0 {
+		return
+	}
+
+	cfg := s.cfg
+	cfg.UseLLM = true
+	cfg.UseLLMVision = true
+	cfg.UseLLMAudio = true
+	cfg.VisionMaxItems = 1
+	cfg.AudioMaxItems = 1
+	if err := validateConfig(cfg); err != nil {
+		s.finishAnalysisStatus(err.Error())
+		s.appendReportWarnings([]string{"automatic analysis skipped: " + err.Error()})
+		return
+	}
+
+	for _, sourcePath := range paths {
+		select {
+		case <-ctx.Done():
+			s.finishAnalysisStatus(ctx.Err().Error())
+			return
+		case <-s.shutdown:
+			s.finishAnalysisStatus("server stopped")
+			return
+		default:
+		}
+
+		warnings, updated := s.analyzeSourcePath(ctx, cfg, sourcePath)
+		s.analysisMu.Lock()
+		s.analysisStatus.Analyzed++
+		s.analysisStatus.Updated += updated
+		s.analysisStatus.Warnings = appendLimitedWarnings(s.analysisStatus.Warnings, warnings, 20)
+		s.analysisMu.Unlock()
+	}
+
+	s.finishAnalysisStatus("")
+}
+
+func (s *webServer) pendingAnalysisPaths() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	paths := make([]string, 0, len(s.report.Items))
+	for _, item := range s.report.Items {
+		if item.Content != nil {
+			continue
+		}
+		if item.Video == nil && item.Audio == nil {
+			continue
+		}
+		paths = append(paths, item.SourcePath)
+	}
+	return paths
+}
+
+func (s *webServer) analyzeSourcePath(ctx context.Context, cfg Config, sourcePath string) ([]string, int) {
+	s.mu.RLock()
+	index := slices.IndexFunc(s.report.Items, func(item Item) bool {
+		return item.SourcePath == sourcePath
+	})
+	if index == -1 {
+		s.mu.RUnlock()
+		return []string{"automatic analysis skipped unknown source path: " + sourcePath}, 0
+	}
+	selected := []Item{s.report.Items[index]}
+	s.mu.RUnlock()
+
+	itemCtx, cancel := context.WithTimeout(ctx, time.Duration(max(1, cfg.LLMTimeoutSeconds*2))*time.Second)
+	defer cancel()
+	warnings := EnrichWithVision(itemCtx, cfg, selected)
+	warnings = append(warnings, EnrichWithAudio(itemCtx, cfg, selected)...)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	index = slices.IndexFunc(s.report.Items, func(item Item) bool {
+		return item.SourcePath == sourcePath
+	})
+	if index == -1 {
+		return warnings, 0
+	}
+	s.report.Items[index] = selected[0]
+	s.report.Options.LLM = true
+	s.report.Options.LLMVision = true
+	s.report.Options.LLMAudio = true
+	s.report.Options.AutoAnalyze = s.cfg.AutoAnalyze
+	s.report.Options.AutoAnalyzeMaxItems = s.cfg.AutoAnalyzeMaxItems
+	s.report.Options.VisionFrames = cfg.VisionFrames
+	s.report.Options.VisionMaxItems = s.cfg.AutoAnalyzeMaxItems
+	s.report.Options.AudioMaxSeconds = cfg.AudioMaxSeconds
+	s.report.Options.AudioMaxItems = s.cfg.AutoAnalyzeMaxItems
+	s.report.Warnings = append(s.report.Warnings, warnings...)
+	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	if selected[0].Content != nil || selected[0].Location != nil {
+		return warnings, 1
+	}
+	return warnings, 0
+}
+
+func (s *webServer) analysisIsRunning() bool {
+	s.analysisMu.RLock()
+	defer s.analysisMu.RUnlock()
+	return s.analysisStatus.Running
+}
+
+func (s *webServer) finishAnalysisStatus(message string) {
+	s.analysisMu.Lock()
+	defer s.analysisMu.Unlock()
+	s.analysisStatus.Running = false
+	s.analysisStatus.FinishedAt = time.Now().Format(time.RFC3339)
+	if message != "" {
+		s.analysisStatus.Error = message
+	}
+}
+
+func (s *webServer) appendReportWarnings(warnings []string) {
+	if len(warnings) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.report.Warnings = append(s.report.Warnings, warnings...)
+	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+}
+
+func appendLimitedWarnings(existing, next []string, limit int) []string {
+	if limit <= 0 || len(existing) >= limit {
+		return existing
+	}
+	remaining := limit - len(existing)
+	if len(next) > remaining {
+		next = next[:remaining]
+	}
+	return append(existing, next...)
 }
 
 func (s *webServer) handlePing(w http.ResponseWriter, r *http.Request) {
