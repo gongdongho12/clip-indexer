@@ -288,6 +288,11 @@ func isOpenAIHosted(baseURL string) bool {
 	return normalized == "" || strings.Contains(normalized, "api.openai.com")
 }
 
+func supportsAudioTranscriptions(baseURL string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(baseURL))
+	return !strings.Contains(normalized, "generativelanguage.googleapis.com")
+}
+
 func summarize(items []Item, discovered int, reportWarnings int) Summary {
 	summary := Summary{
 		FilesDiscovered: discovered,

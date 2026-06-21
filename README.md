@@ -58,6 +58,7 @@ The server prints a localhost URL. Open it in a browser to review:
 
 - original file path
 - shot date
+- row-level analysis status
 - recommended/final filename
 - editable tags
 - raw JSON report
@@ -135,6 +136,23 @@ go run ./cmd/clip-indexer serve \
 ```
 
 `--auto-analyze-max-items 0` analyzes every pending file. The default limit is intentionally small because frame/audio analysis sends media samples to the configured LLM provider and may consume API quota.
+
+While analysis is running, the server command renders a terminal progress bar and the web file list shows row-level states such as `Queued`, `Analyzing`, `Warning`, and `Analyzed`.
+
+For low-cost Gemini vision analysis through Google's OpenAI-compatible endpoint:
+
+```bash
+LLM_API_KEY="..." \
+LLM_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/" \
+LLM_MODEL="gemini-3.1-flash-lite" \
+go run ./cmd/clip-indexer serve \
+  --auto-analyze \
+  --auto-analyze-max-items 3 \
+  --trip "Seoul 2026" \
+  ~/Movies/trip
+```
+
+Gemini analysis currently uses the frame/vision path only in this app. The Whisper-style `/audio/transcriptions` path is skipped for Gemini-compatible base URLs.
 
 For a local or custom endpoint:
 
