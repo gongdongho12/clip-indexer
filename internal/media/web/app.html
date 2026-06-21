@@ -167,7 +167,7 @@
 
     .toolbar {
       display: grid;
-      grid-template-columns: minmax(180px, 1fr) auto auto auto auto auto;
+      grid-template-columns: minmax(180px, 1fr) auto auto auto auto auto auto;
       gap: 10px;
       align-items: center;
       padding: 12px;
@@ -459,6 +459,275 @@
       object-fit: contain;
     }
 
+    .map-page {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-width: 0;
+      min-height: 0;
+      background: var(--bg);
+    }
+
+    .map-page[hidden] {
+      display: none;
+    }
+
+    .map-bar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .map-title {
+      min-width: 0;
+    }
+
+    .map-title h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .map-title span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .map-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .map-content {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .map-stage {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+    }
+
+    .map-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .map-stat {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #ffffff;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .map-stat strong {
+      margin-right: 5px;
+      color: var(--ink);
+    }
+
+    .mind-map {
+      min-width: 760px;
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .map-root-wrap {
+      position: sticky;
+      top: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .map-groups {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .map-group {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(155px, 220px) minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      min-width: 0;
+    }
+
+    .map-group::before {
+      content: "";
+      position: absolute;
+      top: 22px;
+      left: -18px;
+      width: 18px;
+      border-top: 2px solid #c8d7dc;
+    }
+
+    .map-node {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 10px;
+      box-shadow: 0 1px 0 rgba(23, 32, 38, 0.03);
+    }
+
+    .map-node.root {
+      border-color: #80c3c9;
+      background: #e8f7f7;
+    }
+
+    .map-node.group {
+      border-color: #c7d8df;
+      background: #f6fafb;
+    }
+
+    .node-title {
+      font-weight: 760;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .node-sub {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .map-branches {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .map-branch {
+      min-width: 0;
+      display: grid;
+      gap: 7px;
+      padding-left: 10px;
+      border-left: 2px solid #d3e0e5;
+    }
+
+    .branch-title {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    .map-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .map-chip {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--tag);
+      color: var(--tag-ink);
+      font-size: 12px;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .map-chip.place {
+      background: #fff6e8;
+      color: var(--warn);
+    }
+
+    .map-clip {
+      min-width: 0;
+      border: 1px solid #e2e8eb;
+      border-radius: 7px;
+      background: #ffffff;
+      padding: 7px 8px;
+    }
+
+    .map-clip strong,
+    .map-clip span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .map-clip strong {
+      font-size: 12px;
+    }
+
+    .map-clip span {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .empty-map {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      background: #ffffff;
+      color: var(--muted);
+    }
+
+    .mermaid-panel {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      border-left: 1px solid var(--line);
+      background: #fbfcfc;
+    }
+
+    .panel-title {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    #mermaidSource {
+      white-space: pre;
+      overflow-wrap: normal;
+      overflow-x: auto;
+    }
+
     .detail {
       padding: 14px;
       border-bottom: 1px solid var(--line);
@@ -656,24 +925,115 @@
     }
 
     @media (max-width: 980px) {
+      :root {
+        --mobile-panel-height: min(48vh, 390px);
+      }
+
+      .topbar {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 10px 12px;
+      }
+
+      .brand {
+        align-items: center;
+      }
+
+      .brand h1 {
+        font-size: 17px;
+      }
+
+      .stats {
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        overflow-x: auto;
+        padding-bottom: 1px;
+      }
+
+      .stat {
+        flex: 0 0 auto;
+        padding: 4px 7px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
       .main {
         grid-template-columns: 1fr;
+        padding-bottom: calc(var(--mobile-panel-height) + 10px + env(safe-area-inset-bottom));
       }
 
       .left {
         border-right: 0;
       }
 
+      .toolbar {
+        position: sticky;
+        top: var(--topbar-height);
+        z-index: 4;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .toolbar input[type="search"],
+      .toolbar .switch {
+        grid-column: 1 / -1;
+      }
+
+      .toolbar .switch {
+        justify-content: space-between;
+        min-height: 34px;
+        padding: 0 9px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #ffffff;
+      }
+
+      .toolbar button {
+        padding: 0 8px;
+        font-size: 13px;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      table {
+        width: 980px;
+        min-width: 980px;
+      }
+
+      th {
+        position: static;
+        top: auto;
+      }
+
+      .name-col {
+        width: 280px;
+      }
+
+      .tags-col {
+        width: 180px;
+      }
+
       .right {
         border-top: 1px solid var(--line);
-        position: static;
+        position: fixed;
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
         display: flex;
         width: auto;
         height: auto;
-        max-height: none;
-        overflow: visible;
+        max-height: var(--mobile-panel-height);
+        overflow-x: hidden;
+        overflow-y: auto;
         border-left: 0;
-        grid-template-rows: auto auto auto;
+        z-index: 8;
+        box-shadow: 0 -10px 26px rgba(23, 32, 38, 0.14);
       }
 
       .preview {
@@ -690,22 +1050,127 @@
         grid-template-columns: minmax(0, 1fr) auto;
       }
 
-      .toolbar {
-        grid-template-columns: 1fr 1fr;
+      .detail {
+        padding: 10px 12px;
+      }
+
+      .detail h2 {
+        margin: 0;
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .detail .meta-grid {
+        display: none;
+      }
+
+      .analysis-status {
+        padding: 9px 12px;
+        gap: 6px;
+      }
+
+      .ops {
+        gap: 8px;
+        padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+        border-bottom: 0;
+      }
+
+      .ops h2 {
+        display: none;
+      }
+
+      .ops .switch {
+        min-height: 28px;
+        font-size: 13px;
+      }
+
+      .folder-actions,
+      .ops-actions {
+        gap: 7px;
+      }
+
+      .folder-list,
+      .folder-plan {
+        max-height: 68px;
+      }
+
+      .log {
+        min-height: 32px;
+        max-height: 58px;
+        padding: 6px 8px;
+        font-size: 12px;
+      }
+
+      .map-content {
+        grid-template-columns: 1fr;
+        overflow-y: auto;
+      }
+
+      .map-stage {
+        overflow: visible;
+        padding: 12px;
+      }
+
+      .mermaid-panel {
+        border-top: 1px solid var(--line);
+        border-left: 0;
+        max-height: 42vh;
       }
     }
 
     @media (max-width: 560px) {
-      .ops-actions {
+      .map-bar {
         grid-template-columns: 1fr;
+        padding: 12px;
+      }
+
+      .map-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .mind-map {
+        min-width: 0;
+        grid-template-columns: 1fr;
+      }
+
+      .map-root-wrap {
+        position: static;
+      }
+
+      .map-group {
+        grid-template-columns: 1fr;
+      }
+
+      .map-group::before {
+        display: none;
+      }
+
+      .map-branches {
+        grid-template-columns: 1fr;
+      }
+
+      .ops-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .date-col, .tags-col, .analysis-col, .group-col {
         width: 132px;
       }
 
+      .name-col {
+        width: 260px;
+      }
+
       .final-col {
         width: 220px;
+      }
+
+      table {
+        width: 912px;
+        min-width: 912px;
       }
     }
   </style>
@@ -728,6 +1193,7 @@
           <button id="selectEveryFile" title="Select every indexed file">All files</button>
           <button id="clearSelection" title="Clear selected files">Clear</button>
           <button id="showJson" title="Toggle JSON panel">JSON</button>
+          <button id="showTagMap" title="Open tag map">Tag map</button>
           <button id="refresh" title="Reload current report">Reload</button>
         </div>
         <div class="table-wrap">
@@ -786,6 +1252,28 @@
     </div>
     <div class="modal-body" id="modalBody"></div>
   </div>
+  <section class="map-page" id="tagMapPage" hidden>
+    <header class="map-bar">
+      <div class="map-title">
+        <h2>Tag Map</h2>
+        <span id="tagMapSubtitle"></span>
+      </div>
+      <div class="map-actions">
+        <button id="copyMermaid">Copy Mermaid</button>
+        <button id="closeTagMap">Close</button>
+      </div>
+    </header>
+    <div class="map-content">
+      <section class="map-stage">
+        <div class="map-summary" id="tagMapSummary"></div>
+        <div class="mind-map" id="tagMapGraph"></div>
+      </section>
+      <aside class="mermaid-panel">
+        <div class="panel-title">Mermaid source</div>
+        <pre id="mermaidSource"></pre>
+      </aside>
+    </div>
+  </section>
 
   <script>
     const state = {
@@ -799,7 +1287,8 @@
       analysisStatus: null,
       analysisPollTimer: null,
       folders: [],
-      folderPlan: null
+      folderPlan: null,
+      tagMapOpen: false
     };
 
     const $ = (id) => document.getElementById(id);
@@ -904,6 +1393,7 @@
       renderFolders();
       renderFolderPlan();
       renderJson();
+      renderTagMap();
     }
 
     function renderStats() {
@@ -1103,6 +1593,215 @@
           return `<span class="${className}" title="${escapeAttr(title)}">${escapeHtml(folder.folder)}${escapeHtml(count)}</span>`;
         })
         .join("");
+    }
+
+    function tagMapTagsFor(item) {
+      const edit = getEdit(item);
+      const tags = [
+        ...(edit.tags || []),
+        ...(item.content?.tags || []),
+        ...(item.content?.audio_tags || [])
+      ];
+      if (item.location?.label) tags.push(item.location.label);
+      if (item.content?.location_guess) tags.push(item.content.location_guess);
+      const seen = new Set();
+      return tags
+        .map((tag) => String(tag || "").trim())
+        .filter((tag) => {
+          const key = tag.toLowerCase();
+          if (!tag || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+    }
+
+    function collectTagMapData() {
+      const groups = new Map();
+      for (const item of state.report?.items || []) {
+        const label = formatGroup(item);
+        if (!groups.has(label)) {
+          groups.set(label, {
+            label,
+            count: 0,
+            items: [],
+            tags: new Map(),
+            places: new Map()
+          });
+        }
+        const group = groups.get(label);
+        group.count += 1;
+        group.items.push(item);
+        for (const tag of tagMapTagsFor(item)) {
+          const key = tag.toLowerCase();
+          const current = group.tags.get(key) || { label: tag, count: 0 };
+          current.count += 1;
+          group.tags.set(key, current);
+        }
+        const place = item.location?.label || item.content?.location_guess || "";
+        if (place) {
+          const key = place.toLowerCase();
+          const current = group.places.get(key) || { label: place, count: 0 };
+          current.count += 1;
+          group.places.set(key, current);
+        }
+      }
+      return [...groups.values()]
+        .map((group) => ({
+          ...group,
+          tags: [...group.tags.values()].sort(byCountThenLabel),
+          places: [...group.places.values()].sort(byCountThenLabel)
+        }))
+        .sort(byCountThenLabel);
+    }
+
+    function byCountThenLabel(a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.label.localeCompare(b.label);
+    }
+
+    function renderTagMap() {
+      const page = $("tagMapPage");
+      page.hidden = !state.tagMapOpen;
+      if (!state.tagMapOpen) return;
+
+      const items = state.report?.items || [];
+      const groups = collectTagMapData();
+      const totalTags = new Set(groups.flatMap((group) => group.tags.map((tag) => tag.label.toLowerCase()))).size;
+      const analyzed = items.filter((item) => item.content).length;
+      $("tagMapSubtitle").textContent = `${items.length} files · ${groups.length} groups · ${totalTags} tags`;
+      $("tagMapSummary").innerHTML = [
+        ["Files", items.length],
+        ["Groups", groups.length],
+        ["Tags", totalTags],
+        ["Analyzed", analyzed],
+        ["Places", groups.reduce((sum, group) => sum + group.places.length, 0)]
+      ].map(([label, value]) => `<span class="map-stat"><strong>${value}</strong>${label}</span>`).join("");
+
+      $("tagMapGraph").innerHTML = renderTagMapGraph(groups, items.length);
+      $("mermaidSource").textContent = buildMermaidMindmap(groups, items.length);
+    }
+
+    function renderTagMapGraph(groups, fileCount) {
+      if (!fileCount) {
+        return `<div class="empty-map">No files indexed yet</div>`;
+      }
+      const renderedGroups = groups.slice(0, 14).map((group) => {
+        const tags = group.tags.slice(0, 10);
+        const places = group.places.slice(0, 6);
+        const clips = group.items.slice(0, 5);
+        const tagsHtml = tags.length
+          ? tags.map((tag) => `<span class="map-chip" title="${escapeAttr(tag.label)}">${escapeHtml(tag.label)} ${tag.count}</span>`).join("")
+          : `<span class="map-chip">untagged</span>`;
+        const placesHtml = places.length
+          ? places.map((place) => `<span class="map-chip place" title="${escapeAttr(place.label)}">${escapeHtml(place.label)} ${place.count}</span>`).join("")
+          : "";
+        const clipsHtml = clips.map((item) => {
+          const summary = formatScene(item.content);
+          return `
+            <div class="map-clip" title="${escapeAttr(item.source_path)}">
+              <strong>${escapeHtml(baseName(item.source_path))}</strong>
+              <span>${escapeHtml(summary === "-" ? formatDate(item.shot_at) : summary)}</span>
+            </div>
+          `;
+        }).join("");
+        return `
+          <div class="map-group">
+            <div class="map-node group">
+              <div class="node-title" title="${escapeAttr(group.label)}">${escapeHtml(group.label)}</div>
+              <div class="node-sub">${group.count} clip${group.count === 1 ? "" : "s"}</div>
+            </div>
+            <div class="map-branches">
+              <div class="map-branch">
+                <div class="branch-title">Tags</div>
+                <div class="map-chip-row">${tagsHtml}${placesHtml}</div>
+              </div>
+              <div class="map-branch">
+                <div class="branch-title">Clips</div>
+                ${clipsHtml}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+      return `
+        <div class="map-root-wrap">
+          <div class="map-node root">
+            <div class="node-title">Clip Atlas</div>
+            <div class="node-sub">${fileCount} indexed files</div>
+          </div>
+        </div>
+        <div class="map-groups">${renderedGroups}</div>
+      `;
+    }
+
+    function buildMermaidMindmap(groups, fileCount) {
+      const lines = ["mindmap", `  root((Clip Atlas ${fileCount}))`];
+      if (!fileCount) return lines.join("\n");
+      for (const group of groups.slice(0, 14)) {
+        lines.push(`    ${mermaidLabel(`${group.label} (${group.count})`)}`);
+        const tags = group.tags.slice(0, 10);
+        if (tags.length) {
+          lines.push("      Tags");
+          for (const tag of tags) {
+            lines.push(`        ${mermaidLabel(`${tag.label} ${tag.count}`)}`);
+          }
+        }
+        if (group.places.length) {
+          lines.push("      Places");
+          for (const place of group.places.slice(0, 6)) {
+            lines.push(`        ${mermaidLabel(`${place.label} ${place.count}`)}`);
+          }
+        }
+        const clips = group.items.slice(0, 5);
+        if (clips.length) {
+          lines.push("      Clips");
+          for (const item of clips) {
+            lines.push(`        ${mermaidLabel(baseName(item.source_path))}`);
+          }
+        }
+      }
+      return lines.join("\n");
+    }
+
+    function mermaidLabel(value) {
+      return String(value || "untitled")
+        .replace(/[\r\n\t]/g, " ")
+        .replace(/[(){}[\]<>"]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80) || "untitled";
+    }
+
+    function openTagMap() {
+      state.tagMapOpen = true;
+      if (location.hash !== "#tag-map") {
+        history.pushState(null, "", "#tag-map");
+      }
+      renderTagMap();
+    }
+
+    function closeTagMap() {
+      state.tagMapOpen = false;
+      $("tagMapPage").hidden = true;
+      if (location.hash === "#tag-map") {
+        history.pushState(null, "", `${location.pathname}${location.search}`);
+      }
+    }
+
+    function syncHashRoute() {
+      state.tagMapOpen = location.hash === "#tag-map";
+      renderTagMap();
+    }
+
+    async function copyMermaid() {
+      const source = $("mermaidSource").textContent;
+      if (!source) return;
+      try {
+        await navigator.clipboard.writeText(source);
+        log("Copied Mermaid source", "ok");
+      } catch {
+        log("Could not copy Mermaid source", "warn");
+      }
     }
 
     function renderAnalysisBadge(item) {
@@ -1506,6 +2205,9 @@
       state.showJson = !state.showJson;
       renderJson();
     });
+    $("showTagMap").addEventListener("click", openTagMap);
+    $("closeTagMap").addEventListener("click", closeTagMap);
+    $("copyMermaid").addEventListener("click", copyMermaid);
     $("refresh").addEventListener("click", loadReport);
     $("analyze").addEventListener("click", analyzeSelected);
     $("analyzeAll").addEventListener("click", analyzeAll);
@@ -1524,8 +2226,14 @@
       if (event.target.id === "previewModal") closePreview();
     });
     window.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") closePreview();
+      if (event.key !== "Escape") return;
+      if (state.tagMapOpen) {
+        closeTagMap();
+      } else {
+        closePreview();
+      }
     });
+    window.addEventListener("hashchange", syncHashRoute);
     window.addEventListener("resize", syncLayoutMetrics);
     window.addEventListener("pagehide", () => {
       if (!state.shuttingDown) {
@@ -1534,6 +2242,7 @@
     });
 
     syncLayoutMetrics();
+    syncHashRoute();
     startHeartbeat();
     startAnalysisPolling();
     loadReport().catch((error) => log(error.message, "fail"));
