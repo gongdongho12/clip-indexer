@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clip Atlas</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7f8;
+      --panel: #ffffff;
+      --ink: #172026;
+      --muted: #6a747c;
+      --line: #d9e0e4;
+      --accent: #007c89;
+      --accent-strong: #005f68;
+      --warn: #b46a00;
+      --good: #217346;
+      --bad: #b42318;
+      --tag: #eef6f3;
+      --tag-ink: #175647;
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    button, input {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--ink);
+      border-radius: 7px;
+      min-height: 34px;
+      padding: 0 12px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    button.primary:hover {
+      background: var(--accent-strong);
+    }
+
+    button.danger {
+      color: var(--bad);
+    }
+
+    input[type="text"], input[type="search"] {
+      width: 100%;
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 7px 9px;
+      background: #ffffff;
+      color: var(--ink);
+    }
+
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .brand span {
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 6px 9px;
+      background: #fafafa;
+      color: var(--muted);
+    }
+
+    .stat strong {
+      color: var(--ink);
+      margin-right: 4px;
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: minmax(520px, 1fr) 390px;
+      min-height: 0;
+    }
+
+    .left, .right {
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .left {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      border-right: 1px solid var(--line);
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) auto auto auto;
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+      background: #fdfefe;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      min-height: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: middle;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafb;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-align: left;
+      z-index: 1;
+    }
+
+    tr {
+      background: #ffffff;
+    }
+
+    tr:hover, tr.active {
+      background: #f0f8f7;
+    }
+
+    .check-col {
+      width: 44px;
+      text-align: center;
+    }
+
+    .name-col {
+      width: 29%;
+    }
+
+    .date-col {
+      width: 150px;
+    }
+
+    .tags-col {
+      width: 24%;
+    }
+
+    .final-col {
+      width: 31%;
+    }
+
+    .file-name {
+      font-weight: 650;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .path {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      max-width: 130px;
+      min-height: 22px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--tag);
+      color: var(--tag-ink);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .right {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 0;
+      background: #ffffff;
+    }
+
+    .preview {
+      background: #101820;
+      aspect-ratio: 16 / 9;
+      display: grid;
+      place-items: center;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #101820;
+    }
+
+    .empty-preview {
+      color: #b8c4ca;
+    }
+
+    .detail {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .detail h2 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 6px 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .meta-grid strong {
+      color: var(--ink);
+      font-weight: 650;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .ops {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 12px;
+    }
+
+    .ops h2 {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    .ops-row {
+      display: grid;
+      gap: 8px;
+    }
+
+    .ops-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .json-panel {
+      min-height: 0;
+      overflow: auto;
+      background: #fbfcfc;
+      border-bottom: 1px solid var(--line);
+    }
+
+    pre {
+      margin: 0;
+      padding: 14px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #23313a;
+    }
+
+    .log {
+      min-height: 44px;
+      max-height: 120px;
+      overflow: auto;
+      padding: 10px 14px;
+      color: var(--muted);
+      font-size: 13px;
+      background: #ffffff;
+    }
+
+    .ok {
+      color: var(--good);
+    }
+
+    .fail {
+      color: var(--bad);
+    }
+
+    .warn {
+      color: var(--warn);
+    }
+
+    @media (max-width: 980px) {
+      .main {
+        grid-template-columns: 1fr;
+      }
+
+      .left {
+        border-right: 0;
+      }
+
+      .right {
+        border-top: 1px solid var(--line);
+      }
+
+      .toolbar {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Clip Atlas</h1>
+        <span id="subtitle">Loading</span>
+      </div>
+      <div class="stats" id="stats"></div>
+    </header>
+
+    <main class="main">
+      <section class="left">
+        <div class="toolbar">
+          <input id="filter" type="search" placeholder="Filter files, dates, tags">
+          <label class="switch"><input id="selectAll" type="checkbox"> Select all</label>
+          <button id="showJson" title="Toggle JSON panel">JSON</button>
+          <button id="refresh" title="Reload current report">Reload</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="check-col"></th>
+                <th class="name-col">File</th>
+                <th class="date-col">Shot date</th>
+                <th class="tags-col">Tags</th>
+                <th class="final-col">Final name</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="right">
+        <div class="preview" id="preview"></div>
+        <section class="detail" id="detail"></section>
+        <section class="ops">
+          <h2>Apply</h2>
+          <label class="switch"><input id="renameFiles" type="checkbox"> Rename selected files</label>
+          <label class="switch"><input id="writeSidecar" type="checkbox"> Write sidecar tag JSON</label>
+          <label class="switch"><input id="writeXattr" type="checkbox"> Write macOS xattr tags</label>
+          <div class="ops-actions">
+            <button class="primary" id="apply">Apply selected</button>
+            <button class="danger" id="shutdown">Stop server</button>
+          </div>
+        </section>
+        <section class="json-panel" id="jsonPanel" hidden>
+          <pre id="json"></pre>
+        </section>
+        <div class="log" id="log"></div>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const state = {
+      report: null,
+      selected: new Set(),
+      edits: new Map(),
+      activePath: "",
+      showJson: false,
+      shuttingDown: false
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function baseName(path) {
+      return path.split("/").pop() || path;
+    }
+
+    function dirName(path) {
+      const index = path.lastIndexOf("/");
+      return index === -1 ? "" : path.slice(0, index);
+    }
+
+    function tagsText(tags) {
+      return (tags || []).join(", ");
+    }
+
+    function readTags(text) {
+      return text.split(",").map((tag) => tag.trim()).filter(Boolean);
+    }
+
+    function itemKey(item) {
+      return item.source_path;
+    }
+
+    function getEdit(item) {
+      const key = itemKey(item);
+      if (!state.edits.has(key)) {
+        state.edits.set(key, {
+          final_file_name: item.final_file_name,
+          tags: [...(item.tags || [])]
+        });
+      }
+      return state.edits.get(key);
+    }
+
+    function filteredItems() {
+      const query = $("filter").value.trim().toLowerCase();
+      const items = state.report?.items || [];
+      if (!query) return items;
+      return items.filter((item) => {
+        const edit = getEdit(item);
+        return [
+          item.source_path,
+          item.original_file_name,
+          item.shot_at || "",
+          edit.final_file_name,
+          tagsText(edit.tags)
+        ].join(" ").toLowerCase().includes(query);
+      });
+    }
+
+    async function loadReport() {
+      const response = await fetch("/api/report");
+      state.report = await response.json();
+      state.selected.clear();
+      state.edits.clear();
+      state.activePath = state.report.items?.[0]?.source_path || "";
+      render();
+      log(`Loaded ${state.report.summary.files_indexed} files`, "ok");
+    }
+
+    function render() {
+      renderStats();
+      renderRows();
+      renderDetail();
+      renderJson();
+    }
+
+    function renderStats() {
+      const summary = state.report?.summary || {};
+      $("subtitle").textContent = state.report?.options?.trip ? state.report.options.trip : "Local footage manager";
+      $("stats").innerHTML = [
+        ["Files", summary.files_indexed || 0],
+        ["Dates", summary.with_shot_date || 0],
+        ["Video", summary.with_video_stream || 0],
+        ["Place", summary.with_location || 0],
+        ["Scene", summary.with_content || 0],
+        ["Warnings", summary.warnings || 0]
+      ].map(([label, value]) => `<div class="stat"><strong>${value}</strong>${label}</div>`).join("");
+    }
+
+    function renderRows() {
+      const rows = $("rows");
+      rows.innerHTML = "";
+      for (const item of filteredItems()) {
+        const key = itemKey(item);
+        const edit = getEdit(item);
+        const tr = document.createElement("tr");
+        tr.className = state.activePath === key ? "active" : "";
+        tr.innerHTML = `
+          <td class="check-col"><input type="checkbox" ${state.selected.has(key) ? "checked" : ""} title="Select file"></td>
+          <td>
+            <div class="file-name" title="${escapeAttr(item.source_path)}">${escapeHtml(baseName(item.source_path))}</div>
+            <div class="path">${escapeHtml(dirName(item.source_path))}</div>
+          </td>
+          <td>${escapeHtml(formatDate(item.shot_at))}</td>
+          <td><input type="text" value="${escapeAttr(tagsText(edit.tags))}" title="Comma separated tags"></td>
+          <td><input type="text" value="${escapeAttr(edit.final_file_name)}" title="Final filename"></td>
+        `;
+
+        const checkbox = tr.querySelector("input[type=checkbox]");
+        const tagsInput = tr.querySelectorAll("input[type=text]")[0];
+        const nameInput = tr.querySelectorAll("input[type=text]")[1];
+
+        checkbox.addEventListener("click", (event) => {
+          event.stopPropagation();
+          checkbox.checked ? state.selected.add(key) : state.selected.delete(key);
+          renderDetail();
+        });
+        tagsInput.addEventListener("input", () => {
+          edit.tags = readTags(tagsInput.value);
+          renderJson();
+        });
+        nameInput.addEventListener("input", () => {
+          edit.final_file_name = nameInput.value;
+          renderJson();
+        });
+        tr.addEventListener("click", () => {
+          state.activePath = key;
+          render();
+        });
+        rows.appendChild(tr);
+      }
+      const visible = filteredItems();
+      $("selectAll").checked = visible.length > 0 && visible.every((item) => state.selected.has(item.source_path));
+    }
+
+    function renderDetail() {
+      const item = (state.report?.items || []).find((candidate) => candidate.source_path === state.activePath);
+      const preview = $("preview");
+      const detail = $("detail");
+      if (!item) {
+        preview.innerHTML = `<div class="empty-preview">No file selected</div>`;
+        detail.innerHTML = "";
+        return;
+      }
+      const edit = getEdit(item);
+      preview.innerHTML = `<video controls preload="metadata" src="/media?path=${encodeURIComponent(item.source_path)}"></video>`;
+      detail.innerHTML = `
+        <h2>${escapeHtml(baseName(item.source_path))}</h2>
+        <div class="meta-grid">
+          <span>Final</span><strong>${escapeHtml(edit.final_file_name)}</strong>
+          <span>Shot</span><strong>${escapeHtml(formatDate(item.shot_at))}</strong>
+          <span>Duration</span><strong>${escapeHtml(formatDuration(item.duration_seconds))}</strong>
+          <span>Video</span><strong>${escapeHtml(formatVideo(item.video))}</strong>
+          <span>Audio</span><strong>${escapeHtml(formatAudio(item.audio))}</strong>
+          <span>Location</span><strong>${escapeHtml(formatLocation(item.location, item.content))}</strong>
+          <span>Scene</span><strong>${escapeHtml(formatScene(item.content))}</strong>
+          <span>Tags</span><strong>${edit.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join(" ")}</strong>
+        </div>
+      `;
+    }
+
+    function renderJson() {
+      $("jsonPanel").hidden = !state.showJson;
+      if (!state.showJson || !state.report) return;
+      const cloned = structuredClone(state.report);
+      for (const item of cloned.items) {
+        const edit = state.edits.get(item.source_path);
+        if (edit) {
+          item.final_file_name = edit.final_file_name;
+          item.tags = edit.tags;
+        }
+      }
+      $("json").textContent = JSON.stringify(cloned, null, 2);
+    }
+
+    function selectedOperations() {
+      const rename = $("renameFiles").checked;
+      const writeSidecar = $("writeSidecar").checked;
+      const writeXattr = $("writeXattr").checked;
+      return (state.report?.items || [])
+        .filter((item) => state.selected.has(item.source_path))
+        .map((item) => {
+          const edit = getEdit(item);
+          return {
+            source_path: item.source_path,
+            final_file_name: edit.final_file_name,
+            tags: edit.tags,
+            rename,
+            write_sidecar: writeSidecar,
+            write_xattr: writeXattr
+          };
+        });
+    }
+
+    async function applySelected() {
+      const operations = selectedOperations();
+      if (operations.length === 0) {
+        log("Select at least one file", "warn");
+        return;
+      }
+      $("apply").disabled = true;
+      try {
+        const response = await fetch("/api/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operations })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || response.statusText);
+        }
+        state.report = payload.report;
+        state.selected.clear();
+        state.edits.clear();
+        state.activePath = state.report.items?.[0]?.source_path || "";
+        render();
+        const applied = payload.results.filter((result) => result.status === "applied").length;
+        const failed = payload.results.filter((result) => result.status === "failed").length;
+        log(`Applied ${applied}; failed ${failed}`, failed ? "fail" : "ok");
+      } catch (error) {
+        log(error.message, "fail");
+      } finally {
+        $("apply").disabled = false;
+      }
+    }
+
+    function shutdown() {
+      state.shuttingDown = true;
+      fetch("/api/shutdown", { method: "POST", keepalive: true }).catch(() => {});
+      log("Server shutdown requested", "ok");
+    }
+
+    function log(message, kind = "") {
+      const line = document.createElement("div");
+      line.className = kind;
+      line.textContent = `${new Date().toLocaleTimeString()}  ${message}`;
+      $("log").prepend(line);
+    }
+
+    function formatDate(value) {
+      if (!value) return "-";
+      const date = new Date(value);
+      if (Number.isNaN(date.valueOf())) return value;
+      return date.toLocaleString();
+    }
+
+    function formatDuration(seconds) {
+      if (!seconds) return "-";
+      if (seconds < 60) return `${seconds.toFixed(1)}s`;
+      const min = Math.floor(seconds / 60);
+      const sec = Math.round(seconds % 60).toString().padStart(2, "0");
+      return `${min}:${sec}`;
+    }
+
+    function formatVideo(video) {
+      if (!video) return "-";
+      const size = video.width && video.height ? `${video.width}x${video.height}` : "";
+      const fps = video.fps ? `${Math.round(video.fps)}fps` : "";
+      return [video.codec, size, fps].filter(Boolean).join(" ");
+    }
+
+    function formatAudio(audio) {
+      if (!audio) return "silent";
+      return [audio.codec, audio.channels ? `${audio.channels}ch` : "", audio.sample_rate ? `${audio.sample_rate}Hz` : ""].filter(Boolean).join(" ");
+    }
+
+    function formatLocation(location, content) {
+      if (location?.label) return location.label;
+      if (content?.location_guess) return `${content.location_guess}${content.location_confidence ? ` (${Math.round(content.location_confidence * 100)}%)` : ""}`;
+      if (location?.latitude && location?.longitude) return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+      return "-";
+    }
+
+    function formatScene(content) {
+      if (!content) return "-";
+      return content.scene_summary || content.notes || "-";
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[char]));
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/`/g, "&#96;");
+    }
+
+    $("filter").addEventListener("input", renderRows);
+    $("selectAll").addEventListener("change", () => {
+      for (const item of filteredItems()) {
+        $("selectAll").checked ? state.selected.add(item.source_path) : state.selected.delete(item.source_path);
+      }
+      renderRows();
+      renderDetail();
+    });
+    $("showJson").addEventListener("click", () => {
+      state.showJson = !state.showJson;
+      renderJson();
+    });
+    $("refresh").addEventListener("click", loadReport);
+    $("apply").addEventListener("click", applySelected);
+    $("shutdown").addEventListener("click", shutdown);
+    window.addEventListener("pagehide", () => {
+      if (!state.shuttingDown) {
+        navigator.sendBeacon("/api/shutdown", "");
+      }
+    });
+
+    loadReport().catch((error) => log(error.message, "fail"));
+  </script>
+</body>
+</html>

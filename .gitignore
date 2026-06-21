@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Go build/test artifacts
+/clip-indexer
+/bin/
+/build/
+/dist/
+/tmp/
+/.cache/
+*.test
+*.out
+*.prof
+coverage.*
+
+# Editors
+/.vscode/
+/.idea/
+*.swp
+*.swo
+
+# Agent/tool local state
+/.claude/
+/.codex/
+/.serena/
