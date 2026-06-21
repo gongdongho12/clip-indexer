@@ -22,6 +22,7 @@ type analysisCache struct {
 	Tags                []string      `json:"tags,omitempty"`
 	Location            *LocationInfo `json:"location,omitempty"`
 	Content             *ContentInfo  `json:"content,omitempty"`
+	Group               *GroupInfo    `json:"group,omitempty"`
 	RecommendedFileName string        `json:"recommended_file_name,omitempty"`
 	FinalFileName       string        `json:"final_file_name,omitempty"`
 	LLMNotes            string        `json:"llm_notes,omitempty"`
@@ -67,6 +68,10 @@ func applyAnalysisCache(item *Item) []string {
 			item.FinalFileName = finalName
 		}
 	}
+	if cache.Group != nil {
+		group := *cache.Group
+		item.Group = &group
+	}
 	if cache.LLMNotes != "" {
 		item.LLMNotes = cache.LLMNotes
 	}
@@ -104,6 +109,7 @@ func saveAnalysisCache(item Item) error {
 		Tags:                item.Tags,
 		Location:            item.Location,
 		Content:             item.Content,
+		Group:               item.Group,
 		RecommendedFileName: item.RecommendedFileName,
 		FinalFileName:       item.FinalFileName,
 		LLMNotes:            item.LLMNotes,

@@ -150,6 +150,7 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 		probe := Probe(ctx, cfg.FFProbePath, path)
 		item := BuildItem(path, index+1, cfg.Trip, probe)
 		report.Warnings = append(report.Warnings, applyAnalysisCache(&item)...)
+		updateItemGroup(&item)
 		report.Items = append(report.Items, item)
 	}
 
@@ -177,6 +178,7 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 		}
 	}
 	if cfg.UseLLM || cfg.UseLLMVision || cfg.UseLLMAudio {
+		updateItemGroups(report.Items)
 		report.Warnings = append(report.Warnings, saveAnalysisCaches(report.Items)...)
 	}
 

@@ -167,12 +167,16 @@
 
     .toolbar {
       display: grid;
-      grid-template-columns: minmax(180px, 1fr) auto auto auto;
+      grid-template-columns: minmax(180px, 1fr) auto auto auto auto auto;
       gap: 10px;
       align-items: center;
       padding: 12px;
       background: #fdfefe;
       border-bottom: 1px solid var(--line);
+    }
+
+    .toolbar button {
+      white-space: nowrap;
     }
 
     .switch {
@@ -225,7 +229,7 @@
     }
 
     .name-col {
-      width: 29%;
+      width: 25%;
     }
 
     .date-col {
@@ -240,8 +244,12 @@
       width: 118px;
     }
 
+    .group-col {
+      width: 112px;
+    }
+
     .final-col {
-      width: 27%;
+      width: 24%;
     }
 
     .file-name {
@@ -327,9 +335,26 @@
       color: #78838b;
     }
 
+    .group-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 100%;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #edf5f8;
+      color: #235464;
+      font-size: 12px;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .right {
-      display: grid;
-      grid-template-rows: clamp(230px, 34vh, 380px) auto minmax(0, auto) auto auto;
+      display: flex;
+      flex-direction: column;
       gap: 0;
       background: #ffffff;
       position: fixed;
@@ -343,10 +368,16 @@
       border-left: 1px solid var(--line);
     }
 
+    .right > * {
+      min-width: 0;
+      flex-shrink: 0;
+    }
+
     .preview {
       background: #101820;
       display: grid;
       grid-template-rows: minmax(0, 1fr) auto;
+      flex-basis: clamp(230px, 34vh, 380px);
       min-height: 0;
       overflow: hidden;
       border-bottom: 1px solid #1f3039;
@@ -522,12 +553,60 @@
       gap: 8px;
     }
 
+    .ops-actions .primary,
     .ops-actions .danger {
       grid-column: 1 / -1;
     }
 
+    .folder-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .folder-list,
+    .folder-plan {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 126px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      min-width: 0;
+    }
+
+    .folder-list[hidden],
+    .folder-plan[hidden] {
+      display: none;
+    }
+
+    .folder-chip {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #c9d7de;
+      background: #f6fafb;
+      color: #294b5b;
+      font-size: 12px;
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .folder-chip.new {
+      border-color: #b9dac9;
+      background: #eef8f2;
+      color: var(--good);
+    }
+
     .json-panel {
+      flex: 1 1 auto;
       min-height: 0;
+      max-height: 36vh;
       overflow-x: hidden;
       overflow-y: auto;
       background: #fbfcfc;
@@ -546,13 +625,18 @@
 
     .log {
       min-height: 44px;
-      max-height: 120px;
+      max-height: 96px;
       overflow-x: hidden;
       overflow-y: auto;
       padding: 10px 14px;
       color: var(--muted);
       font-size: 13px;
       background: #ffffff;
+      border-top: 1px solid var(--line);
+    }
+
+    .log div {
+      overflow-wrap: anywhere;
     }
 
     .ok {
@@ -579,6 +663,7 @@
       .right {
         border-top: 1px solid var(--line);
         position: static;
+        display: flex;
         width: auto;
         height: auto;
         max-height: none;
@@ -611,7 +696,7 @@
         grid-template-columns: 1fr;
       }
 
-      .date-col, .tags-col, .analysis-col {
+      .date-col, .tags-col, .analysis-col, .group-col {
         width: 132px;
       }
 
@@ -635,7 +720,9 @@
       <section class="left">
         <div class="toolbar">
           <input id="filter" type="search" placeholder="Filter files, dates, tags">
-          <label class="switch"><input id="selectAll" type="checkbox"> Select all</label>
+          <label class="switch"><input id="selectAll" type="checkbox"> <span id="selectAllLabel">Select all</span></label>
+          <button id="selectEveryFile" title="Select every indexed file">All files</button>
+          <button id="clearSelection" title="Clear selected files">Clear</button>
           <button id="showJson" title="Toggle JSON panel">JSON</button>
           <button id="refresh" title="Reload current report">Reload</button>
         </div>
@@ -647,6 +734,7 @@
                 <th class="name-col">File</th>
                 <th class="date-col">Shot date</th>
                 <th class="analysis-col">Analysis</th>
+                <th class="group-col">Group</th>
                 <th class="tags-col">Tags</th>
                 <th class="final-col">Final name</th>
               </tr>
@@ -663,10 +751,19 @@
         <section class="ops">
           <h2>Apply</h2>
           <label class="switch"><input id="renameFiles" type="checkbox"> Rename selected files</label>
+          <label class="switch"><input id="moveGroups" type="checkbox"> Move into group folders</label>
+          <input id="groupRoot" type="text" placeholder="Group destination folder">
+          <div class="folder-actions">
+            <button id="loadFolders">Load folders</button>
+            <button id="planFolders">Plan folders</button>
+          </div>
+          <div class="folder-list" id="folderList" hidden></div>
+          <div class="folder-plan" id="folderPlan" hidden></div>
           <label class="switch"><input id="writeSidecar" type="checkbox"> Write sidecar tag JSON</label>
           <label class="switch"><input id="writeXattr" type="checkbox"> Write macOS xattr tags</label>
           <div class="ops-actions">
             <button id="analyze">Analyze selected</button>
+            <button id="analyzeAll">Analyze all</button>
             <button class="primary" id="apply">Apply selected</button>
             <button class="danger" id="shutdown">Stop server</button>
           </div>
@@ -696,7 +793,9 @@
       shuttingDown: false,
       heartbeatTimer: null,
       analysisStatus: null,
-      analysisPollTimer: null
+      analysisPollTimer: null,
+      folders: [],
+      folderPlan: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -716,6 +815,12 @@
 
     function readTags(text) {
       return text.split(",").map((tag) => tag.trim()).filter(Boolean);
+    }
+
+    function selectedSourcePaths() {
+      return (state.report?.items || [])
+        .filter((item) => state.selected.has(item.source_path))
+        .map((item) => item.source_path);
     }
 
     function itemKey(item) {
@@ -743,10 +848,15 @@
           item.source_path,
           item.original_file_name,
           item.shot_at || "",
+          formatGroup(item),
           edit.final_file_name,
           tagsText(edit.tags)
         ].join(" ").toLowerCase().includes(query);
       });
+    }
+
+    function plannedAssignmentFor(item) {
+      return (state.folderPlan?.assignments || []).find((assignment) => assignment.source_path === item.source_path);
     }
 
     async function loadReport() {
@@ -754,6 +864,7 @@
       state.report = await response.json();
       state.selected.clear();
       state.edits.clear();
+      state.folderPlan = null;
       if (!state.report.items?.some((item) => item.source_path === state.activePath)) {
         state.activePath = state.report.items?.[0]?.source_path || "";
       }
@@ -786,6 +897,8 @@
       renderRows();
       renderDetail();
       renderAnalysisStatus();
+      renderFolders();
+      renderFolderPlan();
       renderJson();
     }
 
@@ -823,6 +936,7 @@
           </td>
           <td>${escapeHtml(formatDate(item.shot_at))}</td>
           <td>${renderAnalysisBadge(item)}</td>
+          <td>${renderGroupBadge(item)}</td>
           <td><input type="text" value="${escapeAttr(tagsText(edit.tags))}" title="Comma separated tags"></td>
           <td><input type="text" value="${escapeAttr(edit.final_file_name)}" title="Final filename"></td>
         `;
@@ -835,6 +949,7 @@
         checkbox.addEventListener("click", (event) => {
           event.stopPropagation();
           checkbox.checked ? state.selected.add(key) : state.selected.delete(key);
+          updateSelectionControls();
           renderDetail();
         });
         tagsInput.addEventListener("input", () => {
@@ -857,8 +972,24 @@
         });
         rows.appendChild(tr);
       }
+      updateSelectionControls();
+    }
+
+    function updateSelectionControls() {
       const visible = filteredItems();
-      $("selectAll").checked = visible.length > 0 && visible.every((item) => state.selected.has(item.source_path));
+      const selectedVisible = visible.filter((item) => state.selected.has(item.source_path)).length;
+      const total = state.report?.items?.length || 0;
+      const selectedTotal = state.selected.size;
+      const checkbox = $("selectAll");
+      checkbox.checked = visible.length > 0 && selectedVisible === visible.length;
+      checkbox.indeterminate = selectedVisible > 0 && selectedVisible < visible.length;
+      const filtered = $("filter").value.trim() !== "";
+      const prefix = filtered ? "Select visible" : "Select all";
+      $("selectAllLabel").textContent = visible.length
+        ? `${prefix} (${selectedVisible}/${visible.length})`
+        : prefix;
+      $("selectEveryFile").textContent = total ? `All files (${selectedTotal}/${total})` : "All files";
+      $("clearSelection").disabled = selectedTotal === 0;
     }
 
     function renderDetail() {
@@ -884,6 +1015,7 @@
           <span>Video</span><strong>${escapeHtml(formatVideo(item.video))}</strong>
           <span>Audio</span><strong>${escapeHtml(formatAudio(item.audio))}</strong>
           <span>Location</span><strong>${escapeHtml(formatLocation(item.location, item.content))}</strong>
+          <span>Group</span><strong>${escapeHtml(formatGroup(item))}</strong>
           <span>Scene</span><strong>${escapeHtml(formatScene(item.content))}</strong>
           <span>Audio clue</span><strong>${escapeHtml(formatAudioInsight(item.content))}</strong>
           <span>Transcript</span><strong>${escapeHtml(formatTranscript(item.content))}</strong>
@@ -936,16 +1068,62 @@
       `;
     }
 
+    function renderFolders() {
+      const panel = $("folderList");
+      if (!state.folders.length) {
+        panel.hidden = true;
+        panel.innerHTML = "";
+        return;
+      }
+      panel.hidden = false;
+      panel.innerHTML = state.folders
+        .slice(0, 40)
+        .map((folder) => `<span class="folder-chip" title="${escapeAttr(folder.path)}">${escapeHtml(folder.relative_path)}</span>`)
+        .join("");
+    }
+
+    function renderFolderPlan() {
+      const panel = $("folderPlan");
+      const folders = state.folderPlan?.folders || [];
+      if (!folders.length) {
+        panel.hidden = true;
+        panel.innerHTML = "";
+        return;
+      }
+      panel.hidden = false;
+      panel.innerHTML = folders
+        .map((folder) => {
+          const count = folder.count ? ` ${folder.count}` : "";
+          const className = folder.existing ? "folder-chip" : "folder-chip new";
+          const title = [folder.reason, folder.existing ? "existing" : "new"].filter(Boolean).join(" / ");
+          return `<span class="${className}" title="${escapeAttr(title)}">${escapeHtml(folder.folder)}${escapeHtml(count)}</span>`;
+        })
+        .join("");
+    }
+
     function renderAnalysisBadge(item) {
       const state = analysisStateFor(item);
       return `<span class="analysis-chip ${state.kind}" title="${escapeAttr(state.title)}">${escapeHtml(state.label)}</span>`;
     }
 
+    function renderGroupBadge(item) {
+      const planned = plannedAssignmentFor(item);
+      if (planned) {
+        return `<span class="group-chip" title="${escapeAttr(planned.reason || "Planned folder")}">${escapeHtml(planned.folder)}</span>`;
+      }
+      const label = formatGroup(item);
+      const title = item.group?.reason ? `Matched by ${item.group.reason}` : "Suggested group";
+      return `<span class="group-chip" title="${escapeAttr(title)}">${escapeHtml(label)}</span>`;
+    }
+
     function analysisStateFor(item) {
       const status = state.analysisStatus || {};
       const sourcePath = item.source_path;
-      if (item.content || item.location) {
+      if (item.content) {
         return { label: "Analyzed", kind: "done", title: "LLM content is available" };
+      }
+      if (item.location) {
+        return { label: "GPS only", kind: "idle", title: "Location metadata exists, but no LLM scene analysis yet" };
       }
       if (status.current_source_path === sourcePath) {
         return { label: "Analyzing", kind: "active", title: "LLM analysis is running for this file" };
@@ -968,17 +1146,23 @@
 
     function selectedOperations() {
       const rename = $("renameFiles").checked;
+      const moveToGroup = $("moveGroups").checked;
+      const groupRoot = $("groupRoot").value.trim();
       const writeSidecar = $("writeSidecar").checked;
       const writeXattr = $("writeXattr").checked;
       return (state.report?.items || [])
         .filter((item) => state.selected.has(item.source_path))
         .map((item) => {
           const edit = getEdit(item);
+          const planned = plannedAssignmentFor(item);
           return {
             source_path: item.source_path,
             final_file_name: edit.final_file_name,
             tags: edit.tags,
             rename,
+            move_to_group: moveToGroup,
+            group_root: groupRoot,
+            target_folder: planned?.folder || "",
             write_sidecar: writeSidecar,
             write_xattr: writeXattr
           };
@@ -989,6 +1173,10 @@
       const operations = selectedOperations();
       if (operations.length === 0) {
         log("Select at least one file", "warn");
+        return;
+      }
+      if ($("moveGroups").checked && !$("groupRoot").value.trim()) {
+        log("Set a group destination folder", "warn");
         return;
       }
       $("apply").disabled = true;
@@ -1005,11 +1193,13 @@
         state.report = payload.report;
         state.selected.clear();
         state.edits.clear();
+        state.folderPlan = null;
         state.activePath = state.report.items?.[0]?.source_path || "";
         render();
         const applied = payload.results.filter((result) => result.status === "applied").length;
         const failed = payload.results.filter((result) => result.status === "failed").length;
-        log(`Applied ${applied}; failed ${failed}`, failed ? "fail" : "ok");
+        const moved = payload.results.filter((result) => result.moved).length;
+        log(`Applied ${applied}; moved ${moved}; failed ${failed}`, failed ? "fail" : "ok");
       } catch (error) {
         log(error.message, "fail");
       } finally {
@@ -1017,15 +1207,92 @@
       }
     }
 
-    async function analyzeSelected() {
-      const sourcePaths = (state.report?.items || [])
-        .filter((item) => state.selected.has(item.source_path))
-        .map((item) => item.source_path);
+    async function readJSONResponse(response) {
+      const text = await response.text();
+      let payload = {};
+      try {
+        payload = text ? JSON.parse(text) : {};
+      } catch {
+        payload = { error: text };
+      }
+      if (!response.ok) {
+        throw new Error(payload.error || payload.message || text || response.statusText);
+      }
+      return payload;
+    }
+
+    async function loadFolders() {
+      const root = $("groupRoot").value.trim();
+      if (!root) {
+        log("Set a group destination folder", "warn");
+        return;
+      }
+      $("loadFolders").disabled = true;
+      try {
+        const response = await fetch("/api/folders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ root, depth: 3 })
+        });
+        const payload = await readJSONResponse(response);
+        state.folders = payload.folders || [];
+        renderFolders();
+        log(`Loaded ${state.folders.length} folder(s)`, payload.warnings?.length ? "warn" : "ok");
+        if (payload.warnings?.length) {
+          log(payload.warnings[0], "warn");
+        }
+      } catch (error) {
+        log(error.message, "fail");
+      } finally {
+        $("loadFolders").disabled = false;
+      }
+    }
+
+    async function planFolders() {
+      const root = $("groupRoot").value.trim();
+      if (!root) {
+        log("Set a group destination folder", "warn");
+        return;
+      }
+      const sourcePaths = selectedSourcePaths();
       if (sourcePaths.length === 0) {
         log("Select at least one file", "warn");
         return;
       }
-      $("analyze").disabled = true;
+      $("planFolders").disabled = true;
+      try {
+        const response = await fetch("/api/folder-plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ root, depth: 3, source_paths: sourcePaths })
+        });
+        const payload = await readJSONResponse(response);
+        state.folders = payload.existing_folders || [];
+        state.folderPlan = payload;
+        $("moveGroups").checked = true;
+        renderFolders();
+        renderFolderPlan();
+        renderRows();
+        renderDetail();
+        log(`Planned ${payload.assignments?.length || 0} file(s) into ${payload.folders?.length || 0} folder(s)`, payload.used_llm ? "ok" : "warn");
+        if (payload.warnings?.length) {
+          log(payload.warnings[0], "warn");
+        }
+      } catch (error) {
+        log(error.message, "fail");
+      } finally {
+        $("planFolders").disabled = false;
+      }
+    }
+
+    async function runAnalysis(sourcePaths, buttonIds) {
+      if (sourcePaths.length === 0) {
+        log("No files to analyze", "warn");
+        return;
+      }
+      for (const id of buttonIds) {
+        $(id).disabled = true;
+      }
       try {
         log(`Analyzing ${sourcePaths.length} file(s)`, "warn");
         const response = await fetch("/api/analyze", {
@@ -1033,20 +1300,12 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ source_paths: sourcePaths })
         });
-        const text = await response.text();
-        let payload = {};
-        try {
-          payload = text ? JSON.parse(text) : {};
-        } catch {
-          payload = { error: text };
-        }
-        if (!response.ok) {
-          throw new Error(payload.error || payload.message || text || response.statusText);
-        }
+        const payload = await readJSONResponse(response);
         const nextActivePath = sourcePaths.includes(state.activePath) ? state.activePath : sourcePaths[0];
         state.report = payload.report;
         state.selected.clear();
         state.edits.clear();
+        state.folderPlan = null;
         state.activePath = state.report.items?.some((item) => item.source_path === nextActivePath)
           ? nextActivePath
           : state.report.items?.[0]?.source_path || "";
@@ -1059,8 +1318,28 @@
       } catch (error) {
         log(error.message, "fail");
       } finally {
-        $("analyze").disabled = false;
+        for (const id of buttonIds) {
+          $(id).disabled = false;
+        }
       }
+    }
+
+    async function analyzeSelected() {
+      const sourcePaths = (state.report?.items || [])
+        .filter((item) => state.selected.has(item.source_path))
+        .map((item) => item.source_path);
+      if (sourcePaths.length === 0) {
+        log("Select at least one file", "warn");
+        return;
+      }
+      await runAnalysis(sourcePaths, ["analyze", "analyzeAll"]);
+    }
+
+    async function analyzeAll() {
+      const sourcePaths = (state.report?.items || [])
+        .filter((item) => !item.content)
+        .map((item) => item.source_path);
+      await runAnalysis(sourcePaths, ["analyze", "analyzeAll"]);
     }
 
     function shutdown() {
@@ -1173,6 +1452,12 @@
       return parts.length ? parts.join(" / ") : "Analyzed";
     }
 
+    function formatGroup(item) {
+      const planned = plannedAssignmentFor(item);
+      if (planned) return planned.folder;
+      return item?.group?.label || item?.group?.key || "Other";
+    }
+
     function escapeHtml(value) {
       return String(value ?? "").replace(/[&<>"']/g, (char) => ({
         "&": "&amp;",
@@ -1194,9 +1479,22 @@
 
     $("filter").addEventListener("input", renderRows);
     $("selectAll").addEventListener("change", () => {
+      const checked = $("selectAll").checked;
       for (const item of filteredItems()) {
-        $("selectAll").checked ? state.selected.add(item.source_path) : state.selected.delete(item.source_path);
+        checked ? state.selected.add(item.source_path) : state.selected.delete(item.source_path);
       }
+      renderRows();
+      renderDetail();
+    });
+    $("selectEveryFile").addEventListener("click", () => {
+      for (const item of state.report?.items || []) {
+        state.selected.add(item.source_path);
+      }
+      renderRows();
+      renderDetail();
+    });
+    $("clearSelection").addEventListener("click", () => {
+      state.selected.clear();
       renderRows();
       renderDetail();
     });
@@ -1206,6 +1504,15 @@
     });
     $("refresh").addEventListener("click", loadReport);
     $("analyze").addEventListener("click", analyzeSelected);
+    $("analyzeAll").addEventListener("click", analyzeAll);
+    $("loadFolders").addEventListener("click", loadFolders);
+    $("planFolders").addEventListener("click", planFolders);
+    $("groupRoot").addEventListener("input", () => {
+      state.folderPlan = null;
+      renderFolderPlan();
+      renderRows();
+      renderDetail();
+    });
     $("apply").addEventListener("click", applySelected);
     $("shutdown").addEventListener("click", shutdown);
     $("closePreview").addEventListener("click", closePreview);

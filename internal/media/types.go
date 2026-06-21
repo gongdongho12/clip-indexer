@@ -77,6 +77,7 @@ type Item struct {
 	Audio               *AudioInfo    `json:"audio,omitempty"`
 	Location            *LocationInfo `json:"location,omitempty"`
 	Content             *ContentInfo  `json:"content,omitempty"`
+	Group               *GroupInfo    `json:"group,omitempty"`
 	Tags                []string      `json:"tags"`
 	NameParts           NameParts     `json:"name_parts"`
 	RecommendedFileName string        `json:"recommended_file_name"`
@@ -122,6 +123,13 @@ type ContentInfo struct {
 	Model              string   `json:"model,omitempty"`
 	AudioModel         string   `json:"audio_model,omitempty"`
 	Notes              string   `json:"notes,omitempty"`
+}
+
+type GroupInfo struct {
+	Key    string `json:"key"`
+	Label  string `json:"label"`
+	Folder string `json:"folder"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type NameParts struct {

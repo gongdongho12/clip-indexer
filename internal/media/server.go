@@ -60,6 +60,9 @@ type applyOperation struct {
 	FinalName    string   `json:"final_file_name"`
 	Tags         []string `json:"tags"`
 	Rename       bool     `json:"rename"`
+	MoveToGroup  bool     `json:"move_to_group"`
+	GroupRoot    string   `json:"group_root,omitempty"`
+	TargetFolder string   `json:"target_folder,omitempty"`
 	WriteSidecar bool     `json:"write_sidecar"`
 	WriteXAttr   bool     `json:"write_xattr"`
 }
@@ -73,6 +76,9 @@ type applyResult struct {
 	SourcePath   string `json:"source_path"`
 	TargetPath   string `json:"target_path,omitempty"`
 	Renamed      bool   `json:"renamed"`
+	Moved        bool   `json:"moved"`
+	Group        string `json:"group,omitempty"`
+	TargetFolder string `json:"target_folder,omitempty"`
 	SidecarPath  string `json:"sidecar_path,omitempty"`
 	XAttrWritten bool   `json:"xattr_written"`
 	Status       string `json:"status"`
@@ -90,6 +96,7 @@ type tagSidecar struct {
 	Tags              []string      `json:"tags"`
 	Location          *LocationInfo `json:"location,omitempty"`
 	Content           *ContentInfo  `json:"content,omitempty"`
+	Group             *GroupInfo    `json:"group,omitempty"`
 	RecommendedName   string        `json:"recommended_file_name"`
 	FinalName         string        `json:"final_file_name"`
 	DurationSeconds   float64       `json:"duration_seconds,omitempty"`
@@ -148,6 +155,8 @@ func (s *webServer) serve(stdout io.Writer) error {
 	mux.HandleFunc("/api/apply", s.handleApply)
 	mux.HandleFunc("/api/analyze", s.handleAnalyze)
 	mux.HandleFunc("/api/analysis-status", s.handleAnalysisStatus)
+	mux.HandleFunc("/api/folders", s.handleFolders)
+	mux.HandleFunc("/api/folder-plan", s.handleFolderPlan)
 	mux.HandleFunc("/api/ping", s.handlePing)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
 	mux.HandleFunc("/media", s.handleMedia)
@@ -264,6 +273,32 @@ type analyzeResponse struct {
 	Report   Report   `json:"report"`
 }
 
+type folderListRequest struct {
+	Root  string `json:"root"`
+	Depth int    `json:"depth,omitempty"`
+}
+
+type folderListResponse struct {
+	Root     string        `json:"root"`
+	Folders  []folderEntry `json:"folders"`
+	Warnings []string      `json:"warnings,omitempty"`
+}
+
+type folderPlanRequest struct {
+	Root        string   `json:"root"`
+	Depth       int      `json:"depth,omitempty"`
+	SourcePaths []string `json:"source_paths"`
+}
+
+type folderPlanResponse struct {
+	Root            string             `json:"root"`
+	UsedLLM         bool               `json:"used_llm"`
+	ExistingFolders []folderEntry      `json:"existing_folders,omitempty"`
+	Folders         []plannedFolder    `json:"folders"`
+	Assignments     []folderAssignment `json:"assignments"`
+	Warnings        []string           `json:"warnings,omitempty"`
+}
+
 type analysisRunOptions struct {
 	MaxItems int
 }
@@ -354,6 +389,102 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		Updated:  updated,
 		Warnings: warnings,
 		Report:   report,
+	})
+}
+
+func (s *webServer) handleFolders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var request folderListRequest
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	if err := decoder.Decode(&request); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	folders, warnings, err := listSubfolders(request.Root, request.Depth)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, folderListResponse{
+		Root:     request.Root,
+		Folders:  folders,
+		Warnings: warnings,
+	})
+}
+
+func (s *webServer) handleFolderPlan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var request folderPlanRequest
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 2<<20))
+	if err := decoder.Decode(&request); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(request.SourcePaths) == 0 {
+		http.Error(w, "select at least one file to plan", http.StatusBadRequest)
+		return
+	}
+
+	existingFolders, warnings, err := listSubfolders(request.Root, request.Depth)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.mu.RLock()
+	selected := make([]Item, 0, len(request.SourcePaths))
+	for _, sourcePath := range request.SourcePaths {
+		index := slices.IndexFunc(s.report.Items, func(item Item) bool {
+			return item.SourcePath == sourcePath
+		})
+		if index >= 0 {
+			selected = append(selected, s.report.Items[index])
+		}
+	}
+	s.mu.RUnlock()
+	if len(selected) == 0 {
+		http.Error(w, "selected files are not part of the current report", http.StatusBadRequest)
+		return
+	}
+
+	cfg := s.cfg
+	cfg.UseLLM = true
+	usedLLM := false
+	var plan folderPlanOutput
+	if strings.TrimSpace(cfg.LLMModel) != "" && strings.TrimSpace(cfg.LLMAPIKey) != "" {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Duration(max(1, cfg.LLMTimeoutSeconds))*time.Second)
+		defer cancel()
+		llmPlan, err := planFoldersWithLLM(ctx, cfg, selected, existingFolders)
+		if err != nil {
+			warnings = append(warnings, "folder plan LLM failed: "+err.Error())
+		} else {
+			plan = completeFolderPlan(llmPlan, selected, existingFolders)
+			usedLLM = true
+		}
+	} else {
+		warnings = append(warnings, "folder plan LLM skipped: missing LLM model or API key")
+	}
+	if !usedLLM {
+		plan = deterministicFolderPlan(selected, existingFolders)
+	}
+
+	writeJSON(w, folderPlanResponse{
+		Root:            request.Root,
+		UsedLLM:         usedLLM,
+		ExistingFolders: existingFolders,
+		Folders:         plan.Folders,
+		Assignments:     plan.Assignments,
+		Warnings:        warnings,
 	})
 }
 
@@ -662,6 +793,25 @@ func appendUniqueString(values []string, value string) []string {
 	return append(values, value)
 }
 
+func moveCompanionFile(oldSourcePath, newSourcePath, suffix string) error {
+	oldPath := oldSourcePath + suffix
+	newPath := newSourcePath + suffix
+	if _, err := os.Stat(oldPath); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if _, err := os.Stat(newPath); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(oldPath, newPath)
+}
+
 func (s *webServer) handlePing(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -703,10 +853,39 @@ func (s *webServer) applyOne(operation applyOperation) applyResult {
 	}
 
 	currentPath := item.SourcePath
-	targetPath := filepath.Join(filepath.Dir(currentPath), finalName)
-	result.TargetPath = targetPath
+	candidate := *item
+	candidate.Tags = append([]string{}, cleanTags...)
+	candidate.FinalFileName = finalName
+	updateItemGroup(&candidate)
 
-	if operation.Rename && targetPath != currentPath {
+	targetDir := filepath.Dir(currentPath)
+	if operation.MoveToGroup {
+		groupRoot := strings.TrimSpace(operation.GroupRoot)
+		if groupRoot == "" {
+			result.Status = "failed"
+			result.Error = "group destination folder is required"
+			return result
+		}
+		groupFolder := "other"
+		if strings.TrimSpace(operation.TargetFolder) != "" {
+			cleanedFolder, err := cleanRelativeFolder(operation.TargetFolder)
+			if err != nil {
+				result.Status = "failed"
+				result.Error = "target folder is unsafe: " + err.Error()
+				return result
+			}
+			groupFolder = cleanedFolder
+		} else if candidate.Group != nil && candidate.Group.Folder != "" {
+			groupFolder = candidate.Group.Folder
+			result.Group = candidate.Group.Key
+		}
+		result.TargetFolder = groupFolder
+		targetDir = filepath.Join(groupRoot, groupFolder)
+	}
+
+	targetPath := filepath.Join(targetDir, finalName)
+	result.TargetPath = targetPath
+	if (operation.Rename || operation.MoveToGroup) && targetPath != currentPath {
 		if _, err := os.Stat(targetPath); err == nil {
 			result.Status = "failed"
 			result.Error = "target file already exists"
@@ -716,20 +895,33 @@ func (s *webServer) applyOne(operation applyOperation) applyResult {
 			result.Error = "could not check target file: " + err.Error()
 			return result
 		}
-		if err := os.Rename(currentPath, targetPath); err != nil {
+		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			result.Status = "failed"
-			result.Error = "rename failed: " + err.Error()
+			result.Error = "could not create target folder: " + err.Error()
 			return result
 		}
-		item.SourcePath = targetPath
-		result.Renamed = true
+		if err := os.Rename(currentPath, targetPath); err != nil {
+			result.Status = "failed"
+			result.Error = "move failed: " + err.Error()
+			return result
+		}
+		_ = moveCompanionFile(currentPath, targetPath, analysisCacheSuffix)
+		_ = moveCompanionFile(currentPath, targetPath, ".clip-tags.json")
+		candidate.SourcePath = targetPath
+		result.Renamed = filepath.Base(currentPath) != filepath.Base(targetPath)
+		result.Moved = filepath.Dir(currentPath) != filepath.Dir(targetPath)
 	}
 
-	item.Tags = cleanTags
-	item.FinalFileName = finalName
+	*item = candidate
+
+	if err := saveAnalysisCache(candidate); err != nil {
+		result.Status = "failed"
+		result.Error = "analysis cache write failed: " + err.Error()
+		return result
+	}
 
 	if operation.WriteSidecar {
-		sidecarPath, err := writeTagSidecar(*item)
+		sidecarPath, err := writeTagSidecar(candidate)
 		if err != nil {
 			result.Status = "failed"
 			result.Error = "sidecar write failed: " + err.Error()
@@ -739,7 +931,7 @@ func (s *webServer) applyOne(operation applyOperation) applyResult {
 	}
 
 	if operation.WriteXAttr {
-		if err := writeXAttr(*item); err != nil {
+		if err := writeXAttr(candidate); err != nil {
 			result.Status = "failed"
 			result.Error = "xattr write failed: " + err.Error()
 			return result
@@ -747,7 +939,7 @@ func (s *webServer) applyOne(operation applyOperation) applyResult {
 		result.XAttrWritten = true
 	}
 
-	if result.Renamed || result.SidecarPath != "" || result.XAttrWritten {
+	if result.Renamed || result.Moved || result.SidecarPath != "" || result.XAttrWritten {
 		result.Status = "applied"
 	} else {
 		result.Status = "updated"
@@ -840,6 +1032,7 @@ func writeTagSidecar(item Item) (string, error) {
 		Tags:              item.Tags,
 		Location:          item.Location,
 		Content:           item.Content,
+		Group:             item.Group,
 		RecommendedName:   item.RecommendedFileName,
 		FinalName:         item.FinalFileName,
 		DurationSeconds:   item.DurationSeconds,
@@ -859,6 +1052,7 @@ func writeXAttr(item Item) error {
 		"service":             serviceName,
 		"updated_at":          time.Now().Format(time.RFC3339),
 		"tags":                item.Tags,
+		"group":               item.Group,
 		"shot_at":             item.ShotAt,
 		"final_file_name":     item.FinalFileName,
 		"recommended_name":    item.RecommendedFileName,
