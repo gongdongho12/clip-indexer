@@ -20,6 +20,8 @@
       --tag: #eef6f3;
       --tag-ink: #175647;
       --radius: 8px;
+      --topbar-height: 65px;
+      --right-panel-width: 390px;
     }
 
     * {
@@ -97,6 +99,9 @@
       padding: 14px 18px;
       border-bottom: 1px solid var(--line);
       background: #ffffff;
+      position: sticky;
+      top: 0;
+      z-index: 6;
     }
 
     .brand {
@@ -142,7 +147,7 @@
 
     .main {
       display: grid;
-      grid-template-columns: minmax(520px, 1fr) 390px;
+      grid-template-columns: minmax(520px, 1fr) var(--right-panel-width);
       min-height: 0;
     }
 
@@ -278,14 +283,17 @@
 
     .right {
       display: grid;
-      grid-template-rows: clamp(220px, 32vh, 360px) auto 1fr auto;
+      grid-template-rows: clamp(220px, 32vh, 360px) auto minmax(0, 1fr) auto;
       gap: 0;
       background: #ffffff;
-      position: sticky;
-      top: 0;
-      height: 100%;
-      align-self: start;
-      overflow: hidden;
+      position: fixed;
+      top: var(--topbar-height);
+      right: 0;
+      bottom: 0;
+      width: var(--right-panel-width);
+      z-index: 5;
+      overflow: auto;
+      border-left: 1px solid var(--line);
     }
 
     .preview {
@@ -474,8 +482,11 @@
       .right {
         border-top: 1px solid var(--line);
         position: static;
+        width: auto;
         height: auto;
         max-height: none;
+        overflow: visible;
+        border-left: 0;
         grid-template-rows: auto auto auto;
       }
 
@@ -887,6 +898,12 @@
       state.heartbeatTimer = setInterval(pingServer, 5000);
     }
 
+    function syncLayoutMetrics() {
+      const topbar = document.querySelector(".topbar");
+      if (!topbar) return;
+      document.documentElement.style.setProperty("--topbar-height", `${Math.ceil(topbar.getBoundingClientRect().height)}px`);
+    }
+
     function openPreview(item) {
       $("modalTitle").textContent = baseName(item.source_path);
       $("modalBody").innerHTML = `<video controls autoplay preload="metadata" src="/media?path=${encodeURIComponent(item.source_path)}"></video>`;
@@ -1002,12 +1019,14 @@
     window.addEventListener("keydown", (event) => {
       if (event.key === "Escape") closePreview();
     });
+    window.addEventListener("resize", syncLayoutMetrics);
     window.addEventListener("pagehide", () => {
       if (!state.shuttingDown) {
         navigator.sendBeacon("/api/ping", "");
       }
     });
 
+    syncLayoutMetrics();
     startHeartbeat();
     loadReport().catch((error) => log(error.message, "fail"));
   </script>
