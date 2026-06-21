@@ -553,9 +553,12 @@
       gap: 8px;
     }
 
-    .ops-actions .primary,
-    .ops-actions .danger {
+    .ops-actions .primary {
       grid-column: 1 / -1;
+    }
+
+    .ops > .danger {
+      width: 100%;
     }
 
     .folder-actions {
@@ -631,8 +634,9 @@
       padding: 10px 14px;
       color: var(--muted);
       font-size: 13px;
-      background: #ffffff;
-      border-top: 1px solid var(--line);
+      background: #fbfcfc;
+      border: 1px solid var(--line);
+      border-radius: 7px;
     }
 
     .log div {
@@ -765,13 +769,13 @@
             <button id="analyze">Analyze selected</button>
             <button id="analyzeAll">Analyze all</button>
             <button class="primary" id="apply">Apply selected</button>
-            <button class="danger" id="shutdown">Stop server</button>
           </div>
+          <div class="log" id="log"></div>
+          <button class="danger" id="shutdown">Stop server</button>
         </section>
         <section class="json-panel" id="jsonPanel" hidden>
           <pre id="json"></pre>
         </section>
-        <div class="log" id="log"></div>
       </aside>
     </main>
   </div>
