@@ -210,6 +210,7 @@ type analyzeRequest struct {
 
 type analyzeResponse struct {
 	Analyzed int      `json:"analyzed"`
+	Updated  int      `json:"updated"`
 	Warnings []string `json:"warnings,omitempty"`
 	Report   Report   `json:"report"`
 }
@@ -269,14 +270,25 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	warnings = append(warnings, EnrichWithAudio(ctx, cfg, selected)...)
 
 	s.mu.Lock()
+	updated := 0
 	for _, analyzed := range selected {
 		index := slices.IndexFunc(s.report.Items, func(item Item) bool {
 			return item.SourcePath == analyzed.SourcePath
 		})
 		if index >= 0 {
 			s.report.Items[index] = analyzed
+			if analyzed.Content != nil || analyzed.Location != nil {
+				updated++
+			}
 		}
 	}
+	s.report.Options.LLM = true
+	s.report.Options.LLMVision = true
+	s.report.Options.LLMAudio = true
+	s.report.Options.VisionFrames = cfg.VisionFrames
+	s.report.Options.VisionMaxItems = cfg.VisionMaxItems
+	s.report.Options.AudioMaxSeconds = cfg.AudioMaxSeconds
+	s.report.Options.AudioMaxItems = cfg.AudioMaxItems
 	s.report.Warnings = append(s.report.Warnings, warnings...)
 	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
 	report := s.report
@@ -284,6 +296,7 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, analyzeResponse{
 		Analyzed: len(selected),
+		Updated:  updated,
 		Warnings: warnings,
 		Report:   report,
 	})

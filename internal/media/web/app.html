@@ -239,6 +239,13 @@
       white-space: nowrap;
     }
 
+    .file-cell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
     .path {
       margin-top: 3px;
       color: var(--muted);
@@ -278,9 +285,10 @@
 
     .preview {
       background: #101820;
-      aspect-ratio: 16 / 9;
+      min-height: 116px;
       display: grid;
       place-items: center;
+      padding: 16px;
     }
 
     video {
@@ -292,6 +300,63 @@
 
     .empty-preview {
       color: #b8c4ca;
+      display: grid;
+      gap: 10px;
+      justify-items: center;
+      text-align: center;
+    }
+
+    .preview-title {
+      color: #eef5f7;
+      font-weight: 700;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      background: rgba(14, 24, 31, 0.86);
+      padding: 14px;
+    }
+
+    .modal[hidden] {
+      display: none;
+    }
+
+    .modal-bar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 12px;
+      color: #ffffff;
+      min-width: 0;
+      padding-bottom: 10px;
+    }
+
+    .modal-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 750;
+    }
+
+    .modal-body {
+      min-height: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    .modal video {
+      width: 100%;
+      height: 100%;
+      max-height: calc(100vh - 78px);
+      object-fit: contain;
     }
 
     .detail {
@@ -400,6 +465,20 @@
         grid-template-columns: 1fr 1fr;
       }
     }
+
+    @media (max-width: 560px) {
+      .ops-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .date-col, .tags-col {
+        width: 132px;
+      }
+
+      .final-col {
+        width: 220px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -456,6 +535,13 @@
         <div class="log" id="log"></div>
       </aside>
     </main>
+  </div>
+  <div class="modal" id="previewModal" hidden>
+    <div class="modal-bar">
+      <div class="modal-title" id="modalTitle"></div>
+      <button id="closePreview">Close</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
   </div>
 
   <script>
@@ -523,7 +609,9 @@
       state.report = await response.json();
       state.selected.clear();
       state.edits.clear();
-      state.activePath = state.report.items?.[0]?.source_path || "";
+      if (!state.report.items?.some((item) => item.source_path === state.activePath)) {
+        state.activePath = state.report.items?.[0]?.source_path || "";
+      }
       render();
       log(`Loaded ${state.report.summary.files_indexed} files`, "ok");
     }
@@ -559,8 +647,13 @@
         tr.innerHTML = `
           <td class="check-col"><input type="checkbox" ${state.selected.has(key) ? "checked" : ""} title="Select file"></td>
           <td>
-            <div class="file-name" title="${escapeAttr(item.source_path)}">${escapeHtml(baseName(item.source_path))}</div>
-            <div class="path">${escapeHtml(dirName(item.source_path))}</div>
+            <div class="file-cell">
+              <div>
+                <div class="file-name" title="${escapeAttr(item.source_path)}">${escapeHtml(baseName(item.source_path))}</div>
+                <div class="path">${escapeHtml(dirName(item.source_path))}</div>
+              </div>
+              <button data-action="preview">Preview</button>
+            </div>
           </td>
           <td>${escapeHtml(formatDate(item.shot_at))}</td>
           <td><input type="text" value="${escapeAttr(tagsText(edit.tags))}" title="Comma separated tags"></td>
@@ -570,6 +663,7 @@
         const checkbox = tr.querySelector("input[type=checkbox]");
         const tagsInput = tr.querySelectorAll("input[type=text]")[0];
         const nameInput = tr.querySelectorAll("input[type=text]")[1];
+        const previewButton = tr.querySelector("button[data-action=preview]");
 
         checkbox.addEventListener("click", (event) => {
           event.stopPropagation();
@@ -583,6 +677,13 @@
         nameInput.addEventListener("input", () => {
           edit.final_file_name = nameInput.value;
           renderJson();
+        });
+        previewButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          state.activePath = key;
+          renderRows();
+          renderDetail();
+          openPreview(item);
         });
         tr.addEventListener("click", () => {
           state.activePath = key;
@@ -604,7 +705,13 @@
         return;
       }
       const edit = getEdit(item);
-      preview.innerHTML = `<video controls preload="metadata" src="/media?path=${encodeURIComponent(item.source_path)}"></video>`;
+      preview.innerHTML = `
+        <div class="empty-preview">
+          <div class="preview-title">${escapeHtml(baseName(item.source_path))}</div>
+          <button id="openPreview">Open preview</button>
+        </div>
+      `;
+      $("openPreview").addEventListener("click", () => openPreview(item));
       detail.innerHTML = `
         <h2>${escapeHtml(baseName(item.source_path))}</h2>
         <div class="meta-grid">
@@ -617,6 +724,7 @@
           <span>Scene</span><strong>${escapeHtml(formatScene(item.content))}</strong>
           <span>Audio clue</span><strong>${escapeHtml(formatAudioInsight(item.content))}</strong>
           <span>Transcript</span><strong>${escapeHtml(formatTranscript(item.content))}</strong>
+          <span>Analysis</span><strong>${escapeHtml(formatAnalysis(item))}</strong>
           <span>Tags</span><strong>${edit.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join(" ")}</strong>
         </div>
       `;
@@ -713,12 +821,18 @@
         if (!response.ok) {
           throw new Error(payload.error || payload.message || text || response.statusText);
         }
+        const nextActivePath = sourcePaths.includes(state.activePath) ? state.activePath : sourcePaths[0];
         state.report = payload.report;
         state.selected.clear();
         state.edits.clear();
-        state.activePath = state.report.items?.[0]?.source_path || "";
+        state.activePath = state.report.items?.some((item) => item.source_path === nextActivePath)
+          ? nextActivePath
+          : state.report.items?.[0]?.source_path || "";
         render();
-        log(`Analyzed ${payload.analyzed} file(s)`, payload.warnings?.length ? "warn" : "ok");
+        log(`Analyzed ${payload.analyzed} file(s), updated ${payload.updated || 0}`, payload.warnings?.length ? "warn" : "ok");
+        if (payload.warnings?.length) {
+          log(payload.warnings[0], "warn");
+        }
       } catch (error) {
         log(error.message, "fail");
       } finally {
@@ -730,6 +844,17 @@
       state.shuttingDown = true;
       fetch("/api/shutdown", { method: "POST", keepalive: true }).catch(() => {});
       log("Server shutdown requested", "ok");
+    }
+
+    function openPreview(item) {
+      $("modalTitle").textContent = baseName(item.source_path);
+      $("modalBody").innerHTML = `<video controls autoplay preload="metadata" src="/media?path=${encodeURIComponent(item.source_path)}"></video>`;
+      $("previewModal").hidden = false;
+    }
+
+    function closePreview() {
+      $("modalBody").innerHTML = "";
+      $("previewModal").hidden = true;
     }
 
     function log(message, kind = "") {
@@ -789,6 +914,16 @@
       return text.length > 220 ? `${text.slice(0, 220)}...` : text;
     }
 
+    function formatAnalysis(item) {
+      if (!item?.content) return "Not analyzed";
+      const parts = [];
+      if (item.content.frame_count) parts.push(`${item.content.frame_count} frame(s)`);
+      if (item.content.audio_seconds) parts.push(`${item.content.audio_seconds}s audio`);
+      if (item.content.model) parts.push(item.content.model);
+      if (item.content.audio_model) parts.push(item.content.audio_model);
+      return parts.length ? parts.join(" / ") : "Analyzed";
+    }
+
     function escapeHtml(value) {
       return String(value ?? "").replace(/[&<>"']/g, (char) => ({
         "&": "&amp;",
@@ -819,6 +954,13 @@
     $("analyze").addEventListener("click", analyzeSelected);
     $("apply").addEventListener("click", applySelected);
     $("shutdown").addEventListener("click", shutdown);
+    $("closePreview").addEventListener("click", closePreview);
+    $("previewModal").addEventListener("click", (event) => {
+      if (event.target.id === "previewModal") closePreview();
+    });
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closePreview();
+    });
     window.addEventListener("pagehide", () => {
       if (!state.shuttingDown) {
         navigator.sendBeacon("/api/shutdown", "");
