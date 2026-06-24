@@ -62,12 +62,6 @@ func listSubfolders(root string, maxDepth int) ([]folderEntry, []string, error) 
 	if root == "" {
 		return nil, nil, errors.New("folder root is required")
 	}
-	if maxDepth <= 0 {
-		maxDepth = 2
-	}
-	if maxDepth > 4 {
-		maxDepth = 4
-	}
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, nil, err
@@ -84,7 +78,7 @@ func listSubfolders(root string, maxDepth int) ([]folderEntry, []string, error) 
 	var warnings []string
 	var walk func(string, int)
 	walk = func(current string, depth int) {
-		if depth >= maxDepth {
+		if maxDepth > 0 && depth >= maxDepth {
 			return
 		}
 		entries, err := os.ReadDir(current)

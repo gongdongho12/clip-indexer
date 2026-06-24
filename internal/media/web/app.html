@@ -83,6 +83,11 @@
       color: var(--ink);
     }
 
+    input.attention {
+      border-color: var(--warn);
+      box-shadow: 0 0 0 3px #ffe3b5;
+    }
+
     input[type="checkbox"] {
       width: 16px;
       height: 16px;
@@ -163,6 +168,19 @@
       justify-content: flex-end;
     }
 
+    .top-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .top-actions .primary {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
     .stat {
       border: 1px solid var(--line);
       border-radius: 7px;
@@ -195,7 +213,7 @@
 
     .toolbar {
       display: grid;
-      grid-template-columns: minmax(180px, 1fr) auto auto auto auto auto;
+      grid-template-columns: minmax(180px, 1fr) auto auto auto auto;
       gap: 10px;
       align-items: center;
       padding: 12px;
@@ -254,6 +272,26 @@
     .check-col {
       width: 44px;
       text-align: center;
+    }
+
+    .select-all-head {
+      display: inline-grid;
+      place-items: center;
+      width: 100%;
+      min-height: 24px;
+      cursor: pointer;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
     }
 
     .name-col {
@@ -982,6 +1020,15 @@
         flex: 1 1 0;
       }
 
+      .top-actions {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .top-actions .primary {
+        width: 100%;
+      }
+
       .stats {
         flex-wrap: nowrap;
         justify-content: flex-start;
@@ -1225,14 +1272,16 @@
         <button id="showFilesView" type="button">Files</button>
         <button id="showTagMap" type="button">Tag map</button>
       </nav>
-      <div class="stats" id="stats"></div>
+      <div class="top-actions">
+        <button class="primary" id="organizeFolder" type="button">Analyze & Organize</button>
+        <div class="stats" id="stats"></div>
+      </div>
     </header>
 
     <main class="main">
       <section class="left">
         <div class="toolbar">
           <input id="filter" type="search" placeholder="Filter files, dates, tags">
-          <label class="switch"><input id="selectAll" type="checkbox"> <span id="selectAllLabel">Select all</span></label>
           <button id="selectEveryFile" title="Select every indexed file">All files</button>
           <button id="clearSelection" title="Clear selected files">Clear</button>
           <button id="showJson" title="Toggle JSON panel">JSON</button>
@@ -1242,7 +1291,12 @@
           <table>
             <thead>
               <tr>
-                <th class="check-col"></th>
+                <th class="check-col">
+                  <label class="select-all-head" title="Select visible files">
+                    <input id="selectAll" type="checkbox" aria-label="Select visible files">
+                    <span class="sr-only" id="selectAllLabel">Select all</span>
+                  </label>
+                </th>
                 <th class="name-col">File</th>
                 <th class="date-col">Shot date</th>
                 <th class="analysis-col">Analysis</th>
@@ -1519,11 +1573,15 @@
       const checkbox = $("selectAll");
       checkbox.checked = visible.length > 0 && selectedVisible === visible.length;
       checkbox.indeterminate = selectedVisible > 0 && selectedVisible < visible.length;
+      checkbox.disabled = visible.length === 0;
       const filtered = $("filter").value.trim() !== "";
       const prefix = filtered ? "Select visible" : "Select all";
-      $("selectAllLabel").textContent = visible.length
+      const selectText = visible.length
         ? `${prefix} (${selectedVisible}/${visible.length})`
         : prefix;
+      $("selectAllLabel").textContent = selectText;
+      checkbox.setAttribute("aria-label", selectText);
+      checkbox.title = selectText;
       $("selectEveryFile").textContent = total ? `All files (${selectedTotal}/${total})` : "All files";
       $("clearSelection").disabled = selectedTotal === 0;
     }
@@ -1989,7 +2047,7 @@
         const response = await fetch("/api/folders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ root, depth: 3 })
+          body: JSON.stringify({ root })
         });
         const payload = await readJSONResponse(response);
         state.folders = payload.folders || [];
@@ -2021,7 +2079,7 @@
         const response = await fetch("/api/folder-plan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ root, depth: 3, source_paths: sourcePaths })
+          body: JSON.stringify({ root, source_paths: sourcePaths })
         });
         const payload = await readJSONResponse(response);
         state.folders = payload.existing_folders || [];
@@ -2040,6 +2098,66 @@
       } finally {
         $("planFolders").disabled = false;
       }
+    }
+
+    async function organizeFolder() {
+      const root = $("groupRoot").value.trim();
+      if (!root) {
+        log("Set a group destination folder", "warn");
+        focusGroupRoot();
+        return;
+      }
+      const sourcePaths = selectedSourcePaths();
+      if (sourcePaths.length === 0) {
+        log("Select files to organize", "warn");
+        return;
+      }
+      const scope = `${sourcePaths.length} selected file(s)`;
+      if (!window.confirm(`Analyze, rename, and move ${scope} into:\n${root}`)) {
+        return;
+      }
+
+      const buttonIds = ["organizeFolder", "analyze", "analyzeAll", "planFolders", "apply"];
+      for (const id of buttonIds) {
+        $(id).disabled = true;
+      }
+      try {
+        log(`Organizing ${scope}`, "warn");
+        const response = await fetch("/api/organize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ root, source_paths: sourcePaths })
+        });
+        const payload = await readJSONResponse(response);
+        state.report = payload.report;
+        state.selected.clear();
+        state.edits.clear();
+        state.folderPlan = null;
+        state.folders = payload.existing_folders || [];
+        state.activePath = state.report.items?.[0]?.source_path || "";
+        render();
+        const applied = (payload.results || []).filter((result) => result.status === "applied").length;
+        const failed = (payload.results || []).filter((result) => result.status === "failed").length;
+        const mapText = payload.map_path ? `Map: ${payload.map_path}` : "Map was not written";
+        log(`Organized ${applied} file(s); failed ${failed}; ${mapText}`, failed ? "fail" : (payload.warnings?.length ? "warn" : "ok"));
+        if (payload.warnings?.length) {
+          log(payload.warnings[0], "warn");
+        }
+      } catch (error) {
+        log(error.message, "fail");
+      } finally {
+        for (const id of buttonIds) {
+          $(id).disabled = false;
+        }
+      }
+    }
+
+    function focusGroupRoot() {
+      const input = $("groupRoot");
+      input.classList.add("attention");
+      input.scrollIntoView({ block: "center", behavior: "smooth" });
+      input.focus();
+      window.setTimeout(() => input.classList.remove("attention"), 1800);
     }
 
     async function runAnalysis(sourcePaths, buttonIds) {
@@ -2263,6 +2381,7 @@
     $("showTagMap").addEventListener("click", openTagMap);
     $("copyMermaid").addEventListener("click", copyMermaid);
     $("refresh").addEventListener("click", loadReport);
+    $("organizeFolder").addEventListener("click", organizeFolder);
     $("analyze").addEventListener("click", analyzeSelected);
     $("analyzeAll").addEventListener("click", analyzeAll);
     $("loadFolders").addEventListener("click", loadFolders);

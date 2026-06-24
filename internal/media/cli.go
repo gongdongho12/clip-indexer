@@ -44,7 +44,7 @@ func printRootUsage(stderr io.Writer) {
 	fmt.Fprintln(stderr, "  serve    launch the local file-manager web UI")
 	fmt.Fprintln(stderr, "\nExamples:")
 	fmt.Fprintf(stderr, "  %s --pretty --trip seoul ~/Movies/trip\n", cliName)
-	fmt.Fprintf(stderr, "  %s serve --recursive --trip seoul ~/Movies/trip\n", cliName)
+	fmt.Fprintf(stderr, "  %s serve --trip seoul ~/Movies/trip\n", cliName)
 }
 
 func runIndex(args []string, stdout, stderr io.Writer, envWarnings []string) error {
@@ -235,6 +235,7 @@ func defaultConfig() Config {
 	return Config{
 		FFProbePath:         envOr("FFPROBE_PATH", "ffprobe"),
 		FFMpegPath:          envOr("FFMPEG_PATH", "ffmpeg"),
+		Recursive:           envBoolOr("CLIP_INDEXER_RECURSIVE", true),
 		Host:                envOr("CLIP_INDEXER_HOST", "127.0.0.1"),
 		Port:                envIntOr("CLIP_INDEXER_PORT", 4317),
 		AutoAnalyze:         envBoolOr("CLIP_INDEXER_AUTO_ANALYZE", false),

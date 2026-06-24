@@ -1,6 +1,10 @@
 package media
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -200,5 +204,104 @@ func TestApplyOneMovesIntoPlannedTargetFolder(t *testing.T) {
 	}
 	if server.report.Items[0].SourcePath != target {
 		t.Fatalf("expected source path to update, got %s", server.report.Items[0].SourcePath)
+	}
+}
+
+func TestHandleOrganizeWritesRootMapAndMovesFiles(t *testing.T) {
+	dir := t.TempDir()
+	sourceDir := filepath.Join(dir, "input")
+	groupRoot := filepath.Join(dir, "organized")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(sourceDir, "clip.mp4")
+	if err := os.WriteFile(source, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &webServer{
+		report: Report{
+			Items: []Item{{
+				SourcePath:       source,
+				OriginalFileName: filepath.Base(source),
+				Extension:        ".mp4",
+				Tags:             []string{"food", "cafe"},
+				FinalFileName:    "clip.mp4",
+			}},
+		},
+	}
+
+	body, err := json.Marshal(organizeRequest{
+		Root:        groupRoot,
+		SourcePaths: []string{source},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/organize", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+
+	server.handleOrganize(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload organizeResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	target := filepath.Join(groupRoot, "food", "clip.mp4")
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("expected organized file: %v", err)
+	}
+	if payload.MapPath != filepath.Join(groupRoot, "clip-atlas-map.json") {
+		t.Fatalf("expected map path under root, got %q", payload.MapPath)
+	}
+	if _, err := os.Stat(payload.MapPath); err != nil {
+		t.Fatalf("expected map file: %v", err)
+	}
+	mapData, err := os.ReadFile(payload.MapPath)
+	if err != nil {
+		t.Fatalf("read map file: %v", err)
+	}
+	var orgMap organizationMap
+	if err := json.Unmarshal(mapData, &orgMap); err != nil {
+		t.Fatalf("decode map file: %v", err)
+	}
+	if len(orgMap.Items) != 1 || orgMap.Items[0].SourcePath != source || orgMap.Items[0].TargetPath != target {
+		t.Fatalf("expected source and target paths in map, got %#v", orgMap.Items)
+	}
+	if server.report.Items[0].SourcePath != target {
+		t.Fatalf("expected report path to update, got %s", server.report.Items[0].SourcePath)
+	}
+	if len(payload.Results) != 1 || payload.Results[0].Status != "applied" {
+		t.Fatalf("expected applied result, got %#v", payload.Results)
+	}
+}
+
+func TestHandleOrganizeRequiresSelectedFiles(t *testing.T) {
+	dir := t.TempDir()
+	server := &webServer{
+		report: Report{
+			Items: []Item{{
+				SourcePath:    filepath.Join(dir, "clip.mp4"),
+				Extension:     ".mp4",
+				Tags:          []string{"food"},
+				FinalFileName: "clip.mp4",
+			}},
+		},
+	}
+
+	body, err := json.Marshal(organizeRequest{Root: filepath.Join(dir, "organized")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/organize", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+
+	server.handleOrganize(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad request, got %d: %s", response.Code, response.Body.String())
 	}
 }

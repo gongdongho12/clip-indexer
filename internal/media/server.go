@@ -157,6 +157,7 @@ func (s *webServer) serve(stdout io.Writer) error {
 	mux.HandleFunc("/api/analysis-status", s.handleAnalysisStatus)
 	mux.HandleFunc("/api/folders", s.handleFolders)
 	mux.HandleFunc("/api/folder-plan", s.handleFolderPlan)
+	mux.HandleFunc("/api/organize", s.handleOrganize)
 	mux.HandleFunc("/api/ping", s.handlePing)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
 	mux.HandleFunc("/media", s.handleMedia)
@@ -298,6 +299,53 @@ type folderPlanResponse struct {
 	Folders         []plannedFolder    `json:"folders"`
 	Assignments     []folderAssignment `json:"assignments"`
 	Warnings        []string           `json:"warnings,omitempty"`
+}
+
+type organizeRequest struct {
+	Root        string   `json:"root"`
+	Depth       int      `json:"depth,omitempty"`
+	SourcePaths []string `json:"source_paths,omitempty"`
+}
+
+type organizeResponse struct {
+	Root            string             `json:"root"`
+	MapPath         string             `json:"map_path,omitempty"`
+	Analyzed        int                `json:"analyzed"`
+	Updated         int                `json:"updated"`
+	UsedLLM         bool               `json:"used_llm"`
+	ExistingFolders []folderEntry      `json:"existing_folders,omitempty"`
+	Folders         []plannedFolder    `json:"folders"`
+	Assignments     []folderAssignment `json:"assignments"`
+	Results         []applyResult      `json:"results"`
+	Warnings        []string           `json:"warnings,omitempty"`
+	Report          Report             `json:"report"`
+}
+
+type organizationMap struct {
+	Service     ServiceInfo           `json:"service"`
+	GeneratedAt string                `json:"generated_at"`
+	Root        string                `json:"root"`
+	Analyzed    int                   `json:"analyzed"`
+	Updated     int                   `json:"updated"`
+	UsedLLM     bool                  `json:"used_llm"`
+	Folders     []plannedFolder       `json:"folders"`
+	Assignments []folderAssignment    `json:"assignments"`
+	Results     []applyResult         `json:"results"`
+	Items       []organizationMapItem `json:"items"`
+	Warnings    []string              `json:"warnings,omitempty"`
+}
+
+type organizationMapItem struct {
+	SourcePath       string        `json:"source_path"`
+	TargetPath       string        `json:"target_path,omitempty"`
+	OriginalFileName string        `json:"original_file_name"`
+	FinalFileName    string        `json:"final_file_name"`
+	Folder           string        `json:"folder,omitempty"`
+	ShotAt           string        `json:"shot_at,omitempty"`
+	Tags             []string      `json:"tags,omitempty"`
+	Group            *GroupInfo    `json:"group,omitempty"`
+	Location         *LocationInfo `json:"location,omitempty"`
+	Content          *ContentInfo  `json:"content,omitempty"`
 }
 
 type analysisRunOptions struct {
@@ -487,6 +535,301 @@ func (s *webServer) handleFolderPlan(w http.ResponseWriter, r *http.Request) {
 		Assignments:     plan.Assignments,
 		Warnings:        warnings,
 	})
+}
+
+func (s *webServer) handleOrganize(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var request organizeRequest
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 2<<20))
+	if err := decoder.Decode(&request); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	root := strings.TrimSpace(request.Root)
+	if root == "" {
+		http.Error(w, "group destination folder is required", http.StatusBadRequest)
+		return
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		http.Error(w, "could not resolve destination folder: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(absRoot, 0o755); err != nil {
+		http.Error(w, "could not create destination folder: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(request.SourcePaths) == 0 {
+		http.Error(w, "select at least one file to organize", http.StatusBadRequest)
+		return
+	}
+
+	sourcePaths := s.organizeSourcePaths(request.SourcePaths)
+	if len(sourcePaths) == 0 {
+		http.Error(w, "no files are available to organize", http.StatusBadRequest)
+		return
+	}
+
+	warnings := []string{}
+	analyzed, updated := s.analyzeForOrganization(r.Context(), sourcePaths, &warnings)
+
+	existingFolders, folderWarnings, err := listSubfolders(absRoot, request.Depth)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	warnings = append(warnings, folderWarnings...)
+
+	selected := s.itemsForSourcePaths(sourcePaths)
+	if len(selected) == 0 {
+		http.Error(w, "selected files are not part of the current report", http.StatusBadRequest)
+		return
+	}
+
+	cfg := s.cfg
+	cfg.UseLLM = true
+	usedLLM := false
+	var plan folderPlanOutput
+	if strings.TrimSpace(cfg.LLMModel) != "" && strings.TrimSpace(cfg.LLMAPIKey) != "" {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Duration(max(1, cfg.LLMTimeoutSeconds))*time.Second)
+		defer cancel()
+		llmPlan, err := planFoldersWithLLM(ctx, cfg, selected, existingFolders)
+		if err != nil {
+			warnings = append(warnings, "folder plan LLM failed: "+err.Error())
+		} else {
+			plan = completeFolderPlan(llmPlan, selected, existingFolders)
+			usedLLM = true
+		}
+	} else {
+		warnings = append(warnings, "folder plan LLM skipped: missing LLM model or API key")
+	}
+	if !usedLLM {
+		plan = deterministicFolderPlan(selected, existingFolders)
+	}
+
+	results := s.applyOrganizationPlan(absRoot, plan.Assignments)
+	for _, result := range results {
+		if result.Status == "failed" && result.Error != "" {
+			warnings = append(warnings, fmt.Sprintf("apply failed for %s: %s", result.SourcePath, result.Error))
+		}
+	}
+
+	orgMap := s.buildOrganizationMap(absRoot, analyzed, updated, usedLLM, plan, results, warnings)
+	mapPath, err := writeOrganizationMap(absRoot, orgMap)
+	if err != nil {
+		warnings = append(warnings, "organization map write failed: "+err.Error())
+	}
+
+	s.mu.Lock()
+	if len(warnings) > 0 {
+		existingWarnings := map[string]bool{}
+		for _, warning := range s.report.Warnings {
+			existingWarnings[warning] = true
+		}
+		for _, warning := range warnings {
+			if existingWarnings[warning] {
+				continue
+			}
+			s.report.Warnings = append(s.report.Warnings, warning)
+			existingWarnings[warning] = true
+		}
+	}
+	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	report := s.report
+	s.mu.Unlock()
+
+	writeJSON(w, organizeResponse{
+		Root:            absRoot,
+		MapPath:         mapPath,
+		Analyzed:        analyzed,
+		Updated:         updated,
+		UsedLLM:         usedLLM,
+		ExistingFolders: existingFolders,
+		Folders:         plan.Folders,
+		Assignments:     plan.Assignments,
+		Results:         results,
+		Warnings:        warnings,
+		Report:          report,
+	})
+}
+
+func (s *webServer) organizeSourcePaths(requested []string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(requested) == 0 {
+		paths := make([]string, 0, len(s.report.Items))
+		for _, item := range s.report.Items {
+			paths = append(paths, item.SourcePath)
+		}
+		return paths
+	}
+	wanted := map[string]bool{}
+	for _, path := range requested {
+		wanted[path] = true
+	}
+	paths := make([]string, 0, len(wanted))
+	for _, item := range s.report.Items {
+		if wanted[item.SourcePath] {
+			paths = append(paths, item.SourcePath)
+		}
+	}
+	return paths
+}
+
+func (s *webServer) itemsForSourcePaths(sourcePaths []string) []Item {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	byPath := map[string]Item{}
+	for _, item := range s.report.Items {
+		byPath[item.SourcePath] = item
+	}
+	items := make([]Item, 0, len(sourcePaths))
+	for _, path := range sourcePaths {
+		if item, ok := byPath[path]; ok {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+func (s *webServer) analyzeForOrganization(ctx context.Context, sourcePaths []string, warnings *[]string) (int, int) {
+	wanted := map[string]bool{}
+	for _, path := range sourcePaths {
+		wanted[path] = true
+	}
+	s.mu.RLock()
+	pending := make([]string, 0, len(sourcePaths))
+	for _, item := range s.report.Items {
+		if !wanted[item.SourcePath] || item.Content != nil {
+			continue
+		}
+		if item.Video == nil && item.Audio == nil {
+			continue
+		}
+		pending = append(pending, item.SourcePath)
+	}
+	s.mu.RUnlock()
+	if len(pending) == 0 {
+		return 0, 0
+	}
+
+	cfg := s.cfg
+	cfg.UseLLM = true
+	cfg.UseLLMVision = true
+	if !supportsAudioTranscriptions(cfg.LLMBaseURL) {
+		cfg.UseLLMAudio = false
+	}
+	cfg.VisionMaxItems = 1
+	cfg.AudioMaxItems = 1
+	if err := validateConfig(cfg); err != nil {
+		*warnings = append(*warnings, "organization analysis skipped: "+err.Error())
+		return 0, 0
+	}
+
+	progress := s.newAnalysisProgress("Organize analysis", len(pending))
+	progress.start()
+	updated := 0
+	for index, sourcePath := range pending {
+		progress.update(index, filepath.Base(sourcePath), updated, len(*warnings))
+		nextWarnings, nextUpdated := s.analyzeSourcePath(ctx, cfg, sourcePath, analysisRunOptions{MaxItems: len(pending)})
+		*warnings = append(*warnings, nextWarnings...)
+		updated += nextUpdated
+		progress.update(index+1, filepath.Base(sourcePath), updated, len(*warnings))
+	}
+	progress.finish(len(pending), updated, len(*warnings), "")
+	return len(pending), updated
+}
+
+func (s *webServer) applyOrganizationPlan(root string, assignments []folderAssignment) []applyResult {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	results := make([]applyResult, 0, len(assignments))
+	for _, assignment := range assignments {
+		tags := []string{}
+		if index := slices.IndexFunc(s.report.Items, func(item Item) bool {
+			return item.SourcePath == assignment.SourcePath
+		}); index >= 0 {
+			tags = append(tags, s.report.Items[index].Tags...)
+		}
+		results = append(results, s.applyOne(applyOperation{
+			SourcePath:   assignment.SourcePath,
+			FinalName:    assignment.FinalFileName,
+			Tags:         tags,
+			Rename:       true,
+			MoveToGroup:  true,
+			GroupRoot:    root,
+			TargetFolder: assignment.Folder,
+		}))
+	}
+	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	return results
+}
+
+func (s *webServer) buildOrganizationMap(root string, analyzed int, updated int, usedLLM bool, plan folderPlanOutput, results []applyResult, warnings []string) organizationMap {
+	resultBySource := map[string]applyResult{}
+	for _, result := range results {
+		resultBySource[result.SourcePath] = result
+	}
+
+	s.mu.RLock()
+	byPath := map[string]Item{}
+	for _, item := range s.report.Items {
+		byPath[item.SourcePath] = item
+	}
+	s.mu.RUnlock()
+
+	items := make([]organizationMapItem, 0, len(plan.Assignments))
+	for _, assignment := range plan.Assignments {
+		result := resultBySource[assignment.SourcePath]
+		lookupPath := assignment.SourcePath
+		if result.Status != "failed" && result.TargetPath != "" {
+			lookupPath = result.TargetPath
+		}
+		item, ok := byPath[lookupPath]
+		if !ok {
+			item = byPath[assignment.SourcePath]
+		}
+		items = append(items, organizationMapItem{
+			SourcePath:       assignment.SourcePath,
+			TargetPath:       result.TargetPath,
+			OriginalFileName: item.OriginalFileName,
+			FinalFileName:    assignment.FinalFileName,
+			Folder:           assignment.Folder,
+			ShotAt:           item.ShotAt,
+			Tags:             append([]string{}, item.Tags...),
+			Group:            item.Group,
+			Location:         item.Location,
+			Content:          item.Content,
+		})
+	}
+
+	return organizationMap{
+		Service:     ServiceInfo{Name: serviceName, CLI: cliName, Version: version},
+		GeneratedAt: time.Now().Format(time.RFC3339),
+		Root:        root,
+		Analyzed:    analyzed,
+		Updated:     updated,
+		UsedLLM:     usedLLM,
+		Folders:     plan.Folders,
+		Assignments: plan.Assignments,
+		Results:     results,
+		Items:       items,
+		Warnings:    append([]string{}, warnings...),
+	}
+}
+
+func writeOrganizationMap(root string, payload organizationMap) (string, error) {
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(root, "clip-atlas-map.json")
+	return path, os.WriteFile(path, append(data, '\n'), 0o644)
 }
 
 func (s *webServer) handleAnalysisStatus(w http.ResponseWriter, r *http.Request) {

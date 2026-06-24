@@ -28,6 +28,25 @@ func TestListSubfoldersIncludesNestedFolders(t *testing.T) {
 	}
 }
 
+func TestListSubfoldersDepthZeroIsUnlimited(t *testing.T) {
+	dir := t.TempDir()
+	deep := filepath.Join(dir, "a", "b", "c", "d", "e")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	folders, warnings, err := listSubfolders(dir, 0)
+	if err != nil {
+		t.Fatalf("list folders: %v", err)
+	}
+	if len(warnings) > 0 {
+		t.Fatalf("unexpected warnings: %v", warnings)
+	}
+	if !hasFolder(folders, "a/b/c/d/e") {
+		t.Fatalf("expected unlimited depth folder in %#v", folders)
+	}
+}
+
 func TestDeterministicFolderPlanUsesTagsAndExistingFolders(t *testing.T) {
 	existing := []folderEntry{{RelativePath: "01_train", Name: "01_train"}}
 	items := []Item{{
