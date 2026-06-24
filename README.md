@@ -34,23 +34,23 @@ JSON 리포트 출력:
 go run ./cmd/clip-indexer --pretty --trip "Japan 2026" /Volumes/SD_Card/DCIM/DJI_001
 ```
 
-하위 폴더까지 스캔:
+하위 폴더까지 기본으로 스캔합니다:
 
 ```bash
-go run ./cmd/clip-indexer --recursive --pretty /Volumes/SD_Card/DCIM/DJI_001
+go run ./cmd/clip-indexer --pretty /Volumes/SD_Card/DCIM/DJI_001
 ```
 
 로컬 웹 UI 실행:
 
 ```bash
-go run ./cmd/clip-indexer serve --recursive --trip "Japan 2026" /Volumes/SD_Card/DCIM/DJI_001
+go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/DJI_001
 ```
 
 바이너리 빌드:
 
 ```bash
 go build -o clip-indexer ./cmd/clip-indexer
-./clip-indexer serve --recursive /Volumes/SD_Card/DCIM/DJI_001
+./clip-indexer serve /Volumes/SD_Card/DCIM/DJI_001
 ```
 
 ## 명령어
@@ -65,13 +65,13 @@ go run ./cmd/clip-indexer --pretty ~/Movies/trip
 `serve`는 로컬 웹 파일 매니저를 실행합니다.
 
 ```bash
-go run ./cmd/clip-indexer serve --recursive ~/Movies/trip
+go run ./cmd/clip-indexer serve ~/Movies/trip
 ```
 
 주요 옵션:
 
 ```text
---recursive, -r              하위 폴더까지 스캔
+--recursive, -r              하위 폴더까지 스캔, 기본값 true
 --pretty                     JSON 보기 좋게 출력
 --trip                       추천 파일명에 포함할 여행/프로젝트 이름
 --ffprobe                    ffprobe 실행 파일 경로
@@ -127,10 +127,20 @@ LLM_MODEL=gemini-3.1-flash-lite
 실행:
 
 ```bash
-go run ./cmd/clip-indexer serve --recursive --trip "Japan 2026" /Volumes/SD_Card/DCIM/DJI_001
+go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/DJI_001
 ```
 
 터미널에 localhost URL이 출력됩니다. 그 주소를 브라우저에서 열면 됩니다.
+
+### 화면 예시
+
+데스크톱에서는 파일 목록, 미리보기, 메타데이터 패널을 한 화면에서 같이 확인할 수 있습니다.
+
+![Clip Atlas desktop UI](docs/screenshots/clip-atlas-desktop.png)
+
+모바일에서는 상단 액션과 목록/적용 컨트롤이 세로로 정리됩니다.
+
+![Clip Atlas mobile UI](docs/screenshots/clip-atlas-mobile.png)
 
 왼쪽 목록에서 볼 수 있는 것:
 
@@ -174,7 +184,6 @@ go run ./cmd/clip-indexer serve --recursive --trip "Japan 2026" /Volumes/SD_Card
 
 ```bash
 go run ./cmd/clip-indexer serve \
-  --recursive \
   --auto-analyze \
   --auto-analyze-max-items 3 \
   --trip "Japan 2026" \
@@ -306,6 +315,22 @@ LLM 폴더 플래닝:
 
 LLM 플래닝이 실패하거나 credential이 없으면 태그 기반 그룹핑으로 fallback 됩니다.
 
+상단 `Analyze & Organize` 버튼:
+
+1. `Group destination folder`에 이동 대상 루트 폴더를 입력합니다.
+2. 정리할 파일을 선택합니다. 선택된 파일이 없으면 실행하지 않습니다.
+3. 필요한 파일은 먼저 분석하고, 폴더 플랜을 만든 뒤 대상 루트 아래로 이동합니다.
+4. 대상 루트 최상단에 `clip-atlas-map.json`을 저장합니다.
+
+이 map JSON에는 분석 결과, 폴더 계획, 원본 경로, 최종 경로, 적용 결과가 같이 들어갑니다. 대상 루트의 기존 하위 폴더는 depth 제한 없이 읽습니다.
+
+작업 아이디어:
+
+- `Analyze & Organize` 실행 전에 dry-run preview를 보여주고, 파일 이동은 별도 확인 단계에서만 실행하기
+- map JSON을 다시 불러와 이전 정리 계획과 현재 폴더 상태를 비교하기
+- 모바일에서 긴 파일명/경로를 더 쉽게 훑을 수 있도록 row detail drawer 추가하기
+- folder plan 결과를 태그 맵 화면과 연결해 폴더별 클립 분포를 시각화하기
+
 Apply 동작:
 
 - `Move into group folders`가 켜져 있으면 선택 파일을 대상 루트 아래로 이동합니다.
@@ -404,5 +429,5 @@ GOCACHE=/private/tmp/clip-indexer-gocache go test ./...
 고정 포트로 웹 UI 실행:
 
 ```bash
-go run ./cmd/clip-indexer serve --recursive --port 52993 /Volumes/SD_Card/DCIM/DJI_001
+go run ./cmd/clip-indexer serve --port 52993 /Volumes/SD_Card/DCIM/DJI_001
 ```
