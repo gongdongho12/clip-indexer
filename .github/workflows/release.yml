@@ -1,0 +1,146 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: ""
+            archive: tar.gz
+          - goos: linux
+            goarch: arm64
+            ext: ""
+            archive: tar.gz
+          - goos: darwin
+            goarch: amd64
+            ext: ""
+            archive: tar.gz
+          - goos: darwin
+            goarch: arm64
+            ext: ""
+            archive: tar.gz
+          - goos: windows
+            goarch: amd64
+            ext: ".exe"
+            archive: zip
+          - goos: windows
+            goarch: arm64
+            ext: ".exe"
+            archive: zip
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/package
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          commit_sha="$(git rev-parse HEAD)"
+          binary="clip-indexer${{ matrix.ext }}"
+          go build \
+            -trimpath \
+            -ldflags="-s -w -X clip-indexer/internal/media.version=${VERSION} -X clip-indexer/internal/media.commit=${commit_sha} -X clip-indexer/internal/media.date=${build_date}" \
+            -o "dist/package/${binary}" \
+            ./cmd/clip-indexer
+
+      - name: Package archive
+        env:
+          VERSION: ${{ github.ref_name }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          asset="clip-indexer_${VERSION}_${GOOS}_${GOARCH}"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            (cd dist/package && zip -9 "../${asset}.zip" ./*)
+          else
+            tar -C dist/package -czf "dist/${asset}.tar.gz" .
+          fi
+
+      - name: Upload release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: clip-indexer-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/clip-indexer_*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create checksums
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum clip-indexer_* > SHA256SUMS.txt
+
+      - name: Write release notes
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: python .github/scripts/release_notes.py "${VERSION}" release-notes.md
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          release_flags=()
+          if [[ "${VERSION}" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            gh release upload "${VERSION}" release-assets/* --clobber
+            gh release edit "${VERSION}" \
+              --title "Clip Atlas ${VERSION}" \
+              --notes-file release-notes.md \
+              "${release_flags[@]}"
+          else
+            gh release create "${VERSION}" release-assets/* \
+              --title "Clip Atlas ${VERSION}" \
+              --notes-file release-notes.md \
+              "${release_flags[@]}"
+          fi

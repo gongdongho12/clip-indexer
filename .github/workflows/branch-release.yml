@@ -1,0 +1,90 @@
+name: Branch Auto Release
+
+on:
+  push:
+    branches:
+      - release/auto
+
+permissions:
+  contents: write
+
+concurrency:
+  group: branch-auto-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Verify and tag prerelease
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Compute prerelease tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_stable="$(
+            git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname |
+              awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }'
+          )"
+
+          if [ -z "${latest_stable}" ]; then
+            latest_stable="v0.1.0"
+          fi
+
+          date_part="$(date -u +%Y%m%d)"
+          short_sha="$(git rev-parse --short=12 HEAD)"
+          tag="${latest_stable}-auto.${date_part}.${GITHUB_RUN_NUMBER}.${short_sha}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "::error::Tag ${tag} already exists."
+            exit 1
+          fi
+
+          echo "base=${latest_stable}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create and push tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          BASE_TAG: ${{ steps.version.outputs.base }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Automated prerelease ${TAG} from ${BASE_TAG}"
+          git push origin "${TAG}"
+
+      - name: Summarize release handoff
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          BASE_TAG: ${{ steps.version.outputs.base }}
+        run: |
+          {
+            echo "## Branch auto release"
+            echo ""
+            echo "- Base version: \`${BASE_TAG}\`"
+            echo "- Created prerelease tag: \`${TAG}\`"
+            echo "- The tag push starts the \`Release\` workflow."
+          } >> "${GITHUB_STEP_SUMMARY}"

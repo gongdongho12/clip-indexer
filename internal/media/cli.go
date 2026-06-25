@@ -15,7 +15,12 @@ import (
 const (
 	serviceName = "Clip Atlas"
 	cliName     = "clip-indexer"
-	version     = "0.1.0"
+)
+
+var (
+	version = "0.1.0-dev"
+	commit  = "unknown"
+	date    = "unknown"
 )
 
 func Run(args []string, stdout, stderr io.Writer) error {
@@ -30,7 +35,7 @@ func Run(args []string, stdout, stderr io.Writer) error {
 			printRootUsage(stderr)
 			return nil
 		case "--version", "-version":
-			fmt.Fprintf(stdout, "%s %s\n", cliName, version)
+			fmt.Fprintln(stdout, versionString())
 			return nil
 		}
 	}
@@ -67,7 +72,7 @@ func runIndex(args []string, stdout, stderr io.Writer, envWarnings []string) err
 		return err
 	}
 	if showVersion {
-		fmt.Fprintf(stdout, "%s %s\n", cliName, version)
+		fmt.Fprintln(stdout, versionString())
 		return nil
 	}
 	if fs.NArg() == 0 {
@@ -218,6 +223,13 @@ func validateConfig(cfg Config) error {
 		}
 	}
 	return nil
+}
+
+func versionString() string {
+	if commit == "unknown" && date == "unknown" {
+		return fmt.Sprintf("%s %s", cliName, version)
+	}
+	return fmt.Sprintf("%s %s (commit %s, built %s)", cliName, version, commit, date)
 }
 
 func visionItemCount(cfg Config, itemCount int) int {

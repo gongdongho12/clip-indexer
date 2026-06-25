@@ -1,0 +1,5 @@
+interface:
+  display_name: "Auto Release Manager"
+  short_description: "Automate tagged branch releases"
+  brand_color: "#2563EB"
+  default_prompt: "Use $auto-release-manager to update the branch-based release automation."

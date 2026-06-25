@@ -30,6 +30,12 @@ func Discover(inputs []string, recursive bool, includeUnsupported bool) ([]strin
 	seen := map[string]bool{}
 
 	addPath := func(path string, explicit bool) {
+		if isIgnoredSidecar(path) {
+			if explicit {
+				warnings = append(warnings, fmt.Sprintf("skipped sidecar metadata file: %s", path))
+			}
+			return
+		}
 		ext := strings.ToLower(filepath.Ext(path))
 		if !includeUnsupported && !videoExtensions[ext] {
 			if explicit {
@@ -93,4 +99,8 @@ func Discover(inputs []string, recursive bool, includeUnsupported bool) ([]strin
 
 	sort.Strings(paths)
 	return paths, warnings, nil
+}
+
+func isIgnoredSidecar(path string) bool {
+	return strings.HasPrefix(filepath.Base(path), "._")
 }

@@ -285,7 +285,7 @@ func callAudioTranscription(ctx context.Context, cfg Config, audioPath string) (
 		req.Header.Set("Authorization", "Bearer "+cfg.LLMAPIKey)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := llmHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}

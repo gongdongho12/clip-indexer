@@ -22,9 +22,14 @@
 *.test
 *.out
 *.prof
+*.go.[0-9]*
 coverage.*
 *.clip-analysis.json
 *.clip-tags.json
+
+# Python cache
+__pycache__/
+*.py[cod]
 
 # Editors
 /.vscode/
@@ -34,5 +39,8 @@ coverage.*
 
 # Agent/tool local state
 /.claude/
-/.codex/
 /.serena/
+/.codex/*
+!/.codex/skills/
+!/.codex/skills/auto-release-manager/
+!/.codex/skills/auto-release-manager/**

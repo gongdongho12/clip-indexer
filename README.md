@@ -53,6 +53,12 @@ go build -o clip-indexer ./cmd/clip-indexer
 ./clip-indexer serve /Volumes/SD_Card/DCIM/DJI_001
 ```
 
+버전 확인:
+
+```bash
+./clip-indexer --version
+```
+
 ## 명령어
 
 `index`는 기본 명령어입니다. 영상 목록을 분석하고 JSON을 stdout으로 출력합니다.
@@ -431,3 +437,9 @@ GOCACHE=/private/tmp/clip-indexer-gocache go test ./...
 ```bash
 go run ./cmd/clip-indexer serve --port 52993 /Volumes/SD_Card/DCIM/DJI_001
 ```
+
+## 릴리즈
+
+브랜치와 태그 릴리즈 흐름은 [docs/branching-release.md](docs/branching-release.md)를 참고하면 됩니다. `vMAJOR.MINOR.PATCH` 태그를 push하면 GitHub Actions가 Linux, macOS, Windows용 바이너리 아카이브와 `SHA256SUMS.txt`를 GitHub Release에 업로드합니다.
+
+자동 검증/배포용 prerelease는 `release/auto` 브랜치에 push하면 됩니다. 이 브랜치는 `vX.Y.Z-auto.YYYYMMDD.RUN.SHORTSHA` tag를 자동 생성하고, tag push가 다시 릴리즈 빌드를 실행합니다. 릴리즈 노트의 `Features` 섹션은 `feat: ...` commit 제목에서 자동 생성됩니다.

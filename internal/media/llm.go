@@ -162,7 +162,7 @@ func callChatCompletion(ctx context.Context, cfg Config, requestBody map[string]
 		req.Header.Set("Authorization", "Bearer "+cfg.LLMAPIKey)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := llmHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("LLM request failed: %w", err)
 	}

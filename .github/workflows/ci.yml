@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "release/**"
+  pull_request:
+    branches:
+      - main
+      - "release/**"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        run: |
+          go build \
+            -trimpath \
+            -ldflags="-s -w -X clip-indexer/internal/media.version=ci-${GITHUB_SHA::12} -X clip-indexer/internal/media.commit=${GITHUB_SHA} -X clip-indexer/internal/media.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o clip-indexer \
+            ./cmd/clip-indexer
+
+      - name: Smoke test version
+        run: ./clip-indexer --version
