@@ -4,6 +4,17 @@ All notable changes to **Clip Atlas** are documented in this file.
 
 ## 2026-06-27
 
+Built from `49696f78b2f8`. **2** commit(s) processed.
+Changes since `v0.1.2`.
+
+### Features
+- toggle file selection with keyboard shortcut (`49696f78b2`)
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`26023a4d1e`)
+
+## 2026-06-27
+
 Built from `a724ccc57b2a`. **2** commit(s) processed.
 Changes since `v0.1.0`.
 
