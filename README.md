@@ -539,4 +539,4 @@ go run ./cmd/clip-indexer serve --port 52993 /Volumes/SD_Card/DCIM/100MEDIA
 
 브랜치와 태그 릴리즈 흐름은 [docs/branching-release.md](docs/branching-release.md)를 참고하면 됩니다. `vMAJOR.MINOR.PATCH` 태그를 push하면 GitHub Actions가 Linux, macOS, Windows용 바이너리 아카이브와 `SHA256SUMS.txt`를 GitHub Release에 업로드합니다.
 
-자동 검증/배포용 prerelease는 `release/auto` 브랜치에 push하면 됩니다. 이 브랜치는 `vX.Y.Z-auto.YYYYMMDD.RUN.SHORTSHA` tag를 자동 생성하고, tag push가 다시 릴리즈 빌드를 실행합니다. 릴리즈 노트의 `Features` 섹션은 `feat: ...` commit 제목에서 자동 생성됩니다.
+자동 검증/배포용 prerelease는 `release/auto` 브랜치에 push하면 됩니다. 이 브랜치는 최신 release tag의 patch 버전을 자동으로 올려 `vX.Y.Z-auto.YYYYMMDD.RUN.SHORTSHA` tag를 생성하고, 해당 tag로 `Release` workflow를 dispatch합니다. 예를 들어 최신 tag가 `v0.1.1-auto...`이면 다음 자동 릴리즈는 `v0.1.2-auto...`가 됩니다. 릴리즈 노트의 `Features` 섹션은 `feat: ...` commit 제목에서 자동 생성됩니다.

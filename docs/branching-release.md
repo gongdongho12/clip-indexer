@@ -47,13 +47,13 @@ clip-indexer --version
 git push origin HEAD:release/auto
 ```
 
-`Branch Auto Release` workflow는 먼저 formatting, vet, test를 실행합니다. 통과하면 최신 안정 tag를 기준으로 아래 형식의 새 prerelease tag를 만듭니다.
+`Branch Auto Release` workflow는 먼저 formatting, vet, test를 실행합니다. 통과하면 최신 release tag의 `vX.Y.Z` 버전을 읽고 patch를 1 올려 아래 형식의 새 prerelease tag를 만듭니다.
 
 ```text
 vX.Y.Z-auto.YYYYMMDD.RUN.SHORTSHA
 ```
 
-예를 들어 최신 안정 tag가 `v0.1.0`이면 자동 tag는 `v0.1.0-auto.20260625.42.1a2b3c4d5e6f`처럼 생성됩니다. 이 tag push가 다시 `Release` workflow를 트리거하고, GitHub Release에는 prerelease로 표시됩니다.
+예를 들어 최신 release tag가 `v0.1.1-auto.20260625.42.1a2b3c4d5e6f`이면 다음 자동 tag는 `v0.1.2-auto.YYYYMMDD.RUN.SHORTSHA`처럼 생성됩니다. workflow가 tag를 만든 뒤 같은 tag로 `Release` workflow를 dispatch하고, GitHub Release에는 prerelease로 표시됩니다.
 
 자동 릴리즈 브랜치를 바꾸고 싶으면 `.github/workflows/branch-release.yml`의 `on.push.branches` 값을 수정합니다.
 
@@ -65,7 +65,7 @@ fix: keep analysis cache stable after rename
 ci: publish checksum file with release assets
 ```
 
-`Release Notes` workflow는 `main`에 push될 때 commit subject를 기준으로 `CHANGELOG.md`를 갱신합니다. GitHub Release에 들어가는 릴리즈 노트는 tag push로 실행되는 `Release` workflow에서 같은 Conventional Commit 분류 규칙으로 다시 생성합니다.
+`Release Notes` workflow는 `main`에 push될 때 commit subject를 기준으로 `CHANGELOG.md`를 갱신합니다. GitHub Release에 들어가는 릴리즈 노트는 dispatch된 `Release` workflow에서 이전 release tag 이후 commit을 같은 Conventional Commit 분류 규칙으로 다시 생성합니다.
 
 ## Release flow
 
@@ -83,7 +83,7 @@ ci: publish checksum file with release assets
 git push origin HEAD:release/auto
 ```
 
-이 push는 `Branch Auto Release` workflow를 실행합니다. workflow는 gofmt, vet, test를 통과한 뒤 릴리즈 노트 preview를 생성하고, `vX.Y.Z-auto.YYYYMMDD.RUN.SHORTSHA` tag를 push합니다. 그 tag가 `Release` workflow를 실행해 platform별 archive, checksums, GitHub prerelease notes를 발행합니다.
+이 push는 `Branch Auto Release` workflow를 실행합니다. workflow는 gofmt, vet, test를 통과한 뒤 릴리즈 노트 preview를 생성하고, 최신 release tag 기준 다음 patch 버전의 `vX.Y.Z-auto.YYYYMMDD.RUN.SHORTSHA` tag를 push합니다. 그 다음 같은 tag로 `Release` workflow를 dispatch해 platform별 archive, checksums, GitHub prerelease notes를 발행합니다.
 
 ## Hotfixes
 

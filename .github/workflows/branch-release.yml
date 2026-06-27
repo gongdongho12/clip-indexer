@@ -44,25 +44,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          latest_stable="$(
-            git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname |
-              awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }'
+          latest_release="$(
+            git tag -l 'v[0-9]*.[0-9]*.[0-9]*' |
+              awk '
+                /^v[0-9]+\.[0-9]+\.[0-9]+($|-auto\.)/ {
+                  tag = $0
+                  version = tag
+                  sub(/^v/, "", version)
+                  sub(/-.*/, "", version)
+                  split(version, parts, ".")
+                  printf "%09d %09d %09d %s\n", parts[1], parts[2], parts[3], tag
+                }
+              ' |
+              sort -r |
+              awk 'NR == 1 { print $4 }'
           )"
 
-          if [ -z "${latest_stable}" ]; then
-            latest_stable="v0.1.0"
+          bump="patch"
+          if [ -z "${latest_release}" ]; then
+            next_version="v0.1.0"
+          else
+            version="${latest_release#v}"
+            version="${version%%-*}"
+            IFS=. read -r major minor patch <<< "${version}"
+            patch=$((patch + 1))
+            next_version="v${major}.${minor}.${patch}"
           fi
 
           date_part="$(date -u +%Y%m%d)"
           short_sha="$(git rev-parse --short=12 HEAD)"
-          tag="${latest_stable}-auto.${date_part}.${GITHUB_RUN_NUMBER}.${short_sha}"
+          tag="${next_version}-auto.${date_part}.${GITHUB_RUN_NUMBER}.${short_sha}"
 
           if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
             echo "::error::Tag ${tag} already exists."
             exit 1
           fi
 
-          echo "base=${latest_stable}" >> "${GITHUB_OUTPUT}"
+          echo "base=${latest_release}" >> "${GITHUB_OUTPUT}"
+          echo "bump=${bump}" >> "${GITHUB_OUTPUT}"
+          echo "next_version=${next_version}" >> "${GITHUB_OUTPUT}"
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
 
       - name: Generate release notes preview
@@ -74,12 +94,14 @@ jobs:
         env:
           TAG: ${{ steps.version.outputs.tag }}
           BASE_TAG: ${{ steps.version.outputs.base }}
+          BUMP: ${{ steps.version.outputs.bump }}
+          NEXT_VERSION: ${{ steps.version.outputs.next_version }}
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "${TAG}" -m "Automated prerelease ${TAG} from ${BASE_TAG}"
+          git tag -a "${TAG}" -m "Automated ${BUMP} prerelease ${TAG} from ${BASE_TAG:-repository history}"
           git push origin "${TAG}"
 
       - name: Dispatch release workflow
@@ -92,11 +114,15 @@ jobs:
         env:
           TAG: ${{ steps.version.outputs.tag }}
           BASE_TAG: ${{ steps.version.outputs.base }}
+          BUMP: ${{ steps.version.outputs.bump }}
+          NEXT_VERSION: ${{ steps.version.outputs.next_version }}
         run: |
           {
             echo "## Branch auto release"
             echo ""
-            echo "- Base version: \`${BASE_TAG}\`"
+            echo "- Latest release tag: \`${BASE_TAG:-none}\`"
+            echo "- Version bump: \`${BUMP}\`"
+            echo "- Next prerelease version: \`${NEXT_VERSION}\`"
             echo "- Created prerelease tag: \`${TAG}\`"
             echo "- Dispatched the \`Release\` workflow for \`${TAG}\`."
             echo "- Release notes preview was generated before tagging."

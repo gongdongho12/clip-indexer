@@ -13,7 +13,7 @@ from pathlib import Path
 CONVENTIONAL_COMMIT = re.compile(
     r"^(?P<type>[a-z]+)(?:\([^)]+\))?(?P<breaking>!)?:\s*(?P<subject>.+)$"
 )
-STABLE_TAG = re.compile(r"^v\d+\.\d+\.\d+$")
+RELEASE_TAG = re.compile(r"^v\d+\.\d+\.\d+(?:-auto\.\d{8}\.\d+\.[0-9A-Za-z]+)?$")
 GROUP_LABELS = {
     "feat": "Features",
     "fix": "Fixes",
@@ -49,11 +49,18 @@ def git(*args: str, check: bool = True) -> str:
     return result.stdout.strip()
 
 
-def find_previous_stable_tag(current_tag: str) -> str:
-    raw_tags = git("tag", "--merged", "HEAD", "--sort=-v:refname")
-    tags = [tag for tag in raw_tags.splitlines() if STABLE_TAG.fullmatch(tag)]
-    if STABLE_TAG.fullmatch(current_tag):
-        tags = [tag for tag in tags if tag != current_tag]
+def find_previous_release_tag(current_tag: str) -> str:
+    raw_tags = git(
+        "for-each-ref",
+        "--sort=-creatordate",
+        "--format=%(refname:short)",
+        "refs/tags",
+    )
+    tags = [
+        tag
+        for tag in raw_tags.splitlines()
+        if tag != current_tag and RELEASE_TAG.fullmatch(tag)
+    ]
     return tags[0] if tags else ""
 
 
@@ -140,7 +147,7 @@ def main() -> int:
         print("release_notes.py needs a tag argument or GITHUB_REF_NAME.", file=sys.stderr)
         return 2
 
-    previous_tag = find_previous_stable_tag(current_tag)
+    previous_tag = find_previous_release_tag(current_tag)
     subjects = commit_subjects(previous_tag)
     output_path.write_text(render(current_tag, previous_tag, subjects), encoding="utf-8")
     return 0
