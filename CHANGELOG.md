@@ -4,6 +4,17 @@ All notable changes to **Clip Atlas** are documented in this file.
 
 ## 2026-06-27
 
+Built from `6d746a38896b`. **2** commit(s) processed.
+Changes since `v0.1.5`.
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`6c456015cc`)
+
+### Tests
+- add mock media fixtures (`6d746a3889`)
+
+## 2026-06-27
+
 Built from `2367ce6b522f`. **2** commit(s) processed.
 Changes since `v0.1.5`.
 
