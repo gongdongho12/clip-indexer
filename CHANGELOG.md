@@ -4,6 +4,17 @@ All notable changes to **Clip Atlas** are documented in this file.
 
 ## 2026-06-27
 
+Built from `2367ce6b522f`. **2** commit(s) processed.
+Changes since `v0.1.5`.
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`822ce8f4e6`)
+
+### Build and CI
+- cache go modules with go.mod (`2367ce6b52`)
+
+## 2026-06-27
+
 Built from `c93a61877dfa`. **2** commit(s) processed.
 Changes since `v0.1.4`.
 
