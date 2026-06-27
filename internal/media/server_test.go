@@ -361,6 +361,116 @@ func TestHandleOrganizeRequiresSelectedFiles(t *testing.T) {
 	}
 }
 
+func TestHandleClearAnalysisClearsSelectedItemsAndCaches(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "clip.mp4")
+	if err := os.WriteFile(source, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(analysisCachePath(source), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &webServer{
+		report: Report{
+			Items: []Item{{
+				SourcePath:          source,
+				OriginalFileName:    filepath.Base(source),
+				Extension:           ".mp4",
+				Tags:                []string{"video", "street", "speech", "seoul_station"},
+				NameParts:           NameParts{Date: "20240615", Time: "120000", Slug: "seoul_station", Sequence: "001"},
+				RecommendedFileName: "seoul_station_scene.mp4",
+				FinalFileName:       "seoul_station_scene.mp4",
+				Location: &LocationInfo{
+					Label:      "Seoul Station",
+					Source:     "llm_vision",
+					Confidence: 0.8,
+				},
+				Content: &ContentInfo{
+					SceneSummary:       "People walking near Seoul Station.",
+					AudioTranscript:    "Next stop is Seoul Station.",
+					LocationGuess:      "Seoul Station",
+					LocationConfidence: 0.8,
+					Tags:               []string{"street"},
+				},
+				LLMNotes: "People walking near Seoul Station.",
+			}},
+		},
+	}
+
+	body, err := json.Marshal(clearAnalysisRequest{SourcePaths: []string{source}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/clear-analysis", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+
+	server.handleClearAnalysis(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload clearAnalysisResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Cleared != 1 || payload.RemovedCaches != 1 {
+		t.Fatalf("expected one cleared item and cache, got %#v", payload)
+	}
+	if _, err := os.Stat(analysisCachePath(source)); !os.IsNotExist(err) {
+		t.Fatalf("expected analysis cache to be removed, stat err=%v", err)
+	}
+	item := server.report.Items[0]
+	if item.Content != nil || item.Location != nil || item.LLMNotes != "" {
+		t.Fatalf("expected LLM analysis fields to be cleared, got %#v", item)
+	}
+	if slices.Contains(item.Tags, "street") || slices.Contains(item.Tags, "speech") || slices.Contains(item.Tags, "seoul_station") {
+		t.Fatalf("expected content-derived tags removed, got %v", item.Tags)
+	}
+	if !slices.Contains(item.Tags, "video") {
+		t.Fatalf("expected base tags to remain, got %v", item.Tags)
+	}
+	if item.FinalFileName == "seoul_station_scene.mp4" || item.RecommendedFileName != item.FinalFileName {
+		t.Fatalf("expected filename suggestion to reset, got recommended=%q final=%q", item.RecommendedFileName, item.FinalFileName)
+	}
+	if payload.Report.Summary.WithContent != 0 {
+		t.Fatalf("expected summary content count to reset, got %#v", payload.Report.Summary)
+	}
+}
+
+func TestClearItemAnalysisPreservesMetadataLocation(t *testing.T) {
+	item := Item{
+		Extension: ".mp4",
+		Tags:      []string{"video", "gps", "geo_37_5665_126_9780", "cafe"},
+		NameParts: NameParts{Date: "20240615", Time: "120000", Slug: "cafe", Sequence: "001"},
+		Location: &LocationInfo{
+			Latitude:   37.5665,
+			Longitude:  126.9780,
+			Label:      "Seoul City Hall",
+			Source:     "gpslatitude,gpslongitude",
+			Confidence: 0.9,
+		},
+		Content: &ContentInfo{
+			SceneSummary: "Cafe table.",
+			Tags:         []string{"cafe"},
+		},
+		LLMNotes: "Cafe table.",
+	}
+
+	if !clearItemAnalysis(&item) {
+		t.Fatalf("expected item to change")
+	}
+	if item.Content != nil || item.LLMNotes != "" {
+		t.Fatalf("expected content fields to be cleared, got %#v", item)
+	}
+	if item.Location == nil || item.Location.Source != "gpslatitude,gpslongitude" {
+		t.Fatalf("expected metadata location to remain, got %#v", item.Location)
+	}
+	if slices.Contains(item.Tags, "cafe") || !slices.Contains(item.Tags, "gps") {
+		t.Fatalf("expected content tags removed and gps tags preserved, got %v", item.Tags)
+	}
+}
+
 func TestManualAnalysisStatusTracksCurrentAndCompletion(t *testing.T) {
 	server := &webServer{}
 	sourcePaths := []string{"/tmp/a.mp4", "/tmp/b.mp4"}

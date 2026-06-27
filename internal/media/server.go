@@ -158,6 +158,7 @@ func (s *webServer) serve(stdout io.Writer) error {
 	mux.HandleFunc("/api/report", s.handleReport)
 	mux.HandleFunc("/api/apply", s.handleApply)
 	mux.HandleFunc("/api/analyze", s.handleAnalyze)
+	mux.HandleFunc("/api/clear-analysis", s.handleClearAnalysis)
 	mux.HandleFunc("/api/analysis-status", s.handleAnalysisStatus)
 	mux.HandleFunc("/api/folders", s.handleFolders)
 	mux.HandleFunc("/api/folder-plan", s.handleFolderPlan)
@@ -279,6 +280,17 @@ type analyzeResponse struct {
 	Updated  int      `json:"updated"`
 	Warnings []string `json:"warnings,omitempty"`
 	Report   Report   `json:"report"`
+}
+
+type clearAnalysisRequest struct {
+	SourcePaths []string `json:"source_paths"`
+}
+
+type clearAnalysisResponse struct {
+	Cleared       int      `json:"cleared"`
+	RemovedCaches int      `json:"removed_caches"`
+	Warnings      []string `json:"warnings,omitempty"`
+	Report        Report   `json:"report"`
 }
 
 type revealRequest struct {
@@ -456,6 +468,75 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		Updated:  updated,
 		Warnings: warnings,
 		Report:   report,
+	})
+}
+
+func (s *webServer) handleClearAnalysis(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	if s.analysisIsRunning() {
+		http.Error(w, "analysis is running", http.StatusConflict)
+		return
+	}
+
+	var request clearAnalysisRequest
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	if err := decoder.Decode(&request); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(request.SourcePaths) == 0 {
+		http.Error(w, "select at least one file to clear", http.StatusBadRequest)
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	matched := 0
+	cleared := 0
+	removedCaches := 0
+	warnings := []string{}
+	seen := map[string]bool{}
+	for _, rawPath := range request.SourcePaths {
+		sourcePath := strings.TrimSpace(rawPath)
+		if sourcePath == "" || seen[sourcePath] {
+			continue
+		}
+		seen[sourcePath] = true
+		index := slices.IndexFunc(s.report.Items, func(item Item) bool {
+			return item.SourcePath == sourcePath
+		})
+		if index == -1 {
+			warnings = append(warnings, "clear analysis skipped unknown source path: "+sourcePath)
+			continue
+		}
+		matched++
+		if clearItemAnalysis(&s.report.Items[index]) {
+			cleared++
+		}
+		removed, err := removeAnalysisCache(sourcePath)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("analysis cache remove failed for %s: %v", sourcePath, err))
+		} else if removed {
+			removedCaches++
+		}
+	}
+	if matched == 0 {
+		http.Error(w, "selected files are not part of the current report", http.StatusBadRequest)
+		return
+	}
+	s.report.Warnings = append(s.report.Warnings, warnings...)
+	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	writeJSON(w, clearAnalysisResponse{
+		Cleared:       cleared,
+		RemovedCaches: removedCaches,
+		Warnings:      warnings,
+		Report:        s.report,
 	})
 }
 
@@ -954,6 +1035,71 @@ func (s *webServer) pendingAnalysisPaths() []string {
 		paths = append(paths, item.SourcePath)
 	}
 	return paths
+}
+
+func clearItemAnalysis(item *Item) bool {
+	changed := item.Content != nil || item.LLMNotes != "" || isLLMGeneratedLocation(item.Location)
+	removeTags := tagRemovalSet(contentTags(item.Content))
+	if isLLMGeneratedLocation(item.Location) {
+		for _, tag := range locationTags(item.Location) {
+			removeTags[slugify(tag)] = true
+		}
+		item.Location = nil
+	}
+	if len(removeTags) > 0 {
+		nextTags := removeTagsBySlug(item.Tags, removeTags)
+		if !slices.Equal(nextTags, item.Tags) {
+			changed = true
+			item.Tags = nextTags
+		}
+	}
+	if item.Content != nil {
+		item.Content = nil
+	}
+	if item.LLMNotes != "" {
+		item.LLMNotes = ""
+	}
+	if changed {
+		item.NameParts.Slug = nameSlug(item.Tags)
+		if nextName := buildFileName(item.NameParts, item.Extension); nextName != "" {
+			item.RecommendedFileName = nextName
+			item.FinalFileName = nextName
+		}
+		updateItemGroup(item)
+	}
+	return changed
+}
+
+func isLLMGeneratedLocation(location *LocationInfo) bool {
+	if location == nil {
+		return false
+	}
+	source := strings.ToLower(strings.TrimSpace(location.Source))
+	return strings.HasPrefix(source, "llm_")
+}
+
+func tagRemovalSet(tags []string) map[string]bool {
+	remove := map[string]bool{}
+	for _, tag := range tags {
+		if slug := slugify(tag); slug != "" {
+			remove[slug] = true
+		}
+	}
+	return remove
+}
+
+func removeTagsBySlug(tags []string, remove map[string]bool) []string {
+	if len(remove) == 0 {
+		return tags
+	}
+	filtered := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if remove[slugify(tag)] {
+			continue
+		}
+		filtered = append(filtered, tag)
+	}
+	return filtered
 }
 
 func (s *webServer) analyzeSourcePath(ctx context.Context, cfg Config, sourcePath string, options analysisRunOptions) ([]string, int) {

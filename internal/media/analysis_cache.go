@@ -32,6 +32,20 @@ func analysisCachePath(sourcePath string) string {
 	return sourcePath + analysisCacheSuffix
 }
 
+func removeAnalysisCache(sourcePath string) (bool, error) {
+	path := analysisCachePath(sourcePath)
+	if os.Getenv("CLIP_INDEXER_SAVE_REAL") == "1" {
+		path = path + ".real"
+	}
+	if err := os.Remove(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 func applyAnalysisCache(item *Item) []string {
 	if os.Getenv("CLIP_INDEXER_SAVE_REAL") == "1" {
 		return nil

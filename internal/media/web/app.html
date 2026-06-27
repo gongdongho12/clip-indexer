@@ -967,6 +967,10 @@
       grid-column: 1 / -1;
     }
 
+    .ops-actions .danger {
+      grid-column: 1 / -1;
+    }
+
     .ops > .danger {
       width: 100%;
     }
@@ -1414,6 +1418,7 @@
           <div class="ops-actions">
             <button id="analyze">Analyze selected</button>
             <button id="analyzeAll">Analyze all</button>
+            <button class="danger" id="clearAnalysis">Clear selected analysis</button>
             <button class="primary" id="apply">Apply selected</button>
           </div>
           <div class="log" id="log"></div>
@@ -1678,6 +1683,10 @@
       checkbox.title = selectText;
       $("selectEveryFile").textContent = total ? `All files (${selectedTotal}/${total})` : "All files";
       $("clearSelection").disabled = selectedTotal === 0;
+      $("clearAnalysis").disabled = selectedTotal === 0 || Boolean(state.analysisStatus?.running);
+      $("clearAnalysis").textContent = selectedTotal > 0
+        ? `Clear analysis (${selectedTotal})`
+        : "Clear selected analysis";
     }
 
     function renderDetail() {
@@ -2243,7 +2252,7 @@
         return;
       }
 
-      const buttonIds = ["topAnalyzeSelected", "organizeFolder", "analyze", "analyzeAll", "planFolders", "apply"];
+      const buttonIds = ["topAnalyzeSelected", "organizeFolder", "analyze", "analyzeAll", "clearAnalysis", "planFolders", "apply"];
       for (const id of buttonIds) {
         $(id).disabled = true;
       }
@@ -2344,14 +2353,57 @@
         log("Select at least one file", "warn");
         return;
       }
-      await runAnalysis(sourcePaths, ["topAnalyzeSelected", "organizeFolder", "analyze", "analyzeAll"]);
+      await runAnalysis(sourcePaths, ["topAnalyzeSelected", "organizeFolder", "analyze", "analyzeAll", "clearAnalysis"]);
     }
 
     async function analyzeAll() {
       const sourcePaths = (state.report?.items || [])
         .filter((item) => !item.content)
         .map((item) => item.source_path);
-      await runAnalysis(sourcePaths, ["topAnalyzeSelected", "organizeFolder", "analyze", "analyzeAll"]);
+      await runAnalysis(sourcePaths, ["topAnalyzeSelected", "organizeFolder", "analyze", "analyzeAll", "clearAnalysis"]);
+    }
+
+    async function clearSelectedAnalysis() {
+      const sourcePaths = selectedSourcePaths();
+      if (sourcePaths.length === 0) {
+        log("Select at least one file", "warn");
+        return;
+      }
+      if (!window.confirm(`Clear analysis results for ${sourcePaths.length} selected file(s)?\nOriginal media files stay unchanged.`)) {
+        return;
+      }
+      const buttonIds = ["topAnalyzeSelected", "organizeFolder", "analyze", "analyzeAll", "clearAnalysis", "planFolders", "apply"];
+      for (const id of buttonIds) {
+        $(id).disabled = true;
+      }
+      try {
+        const response = await fetch("/api/clear-analysis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source_paths: sourcePaths })
+        });
+        const payload = await readJSONResponse(response);
+        const nextActivePath = sourcePaths.includes(state.activePath) ? state.activePath : sourcePaths[0];
+        state.report = payload.report;
+        state.selected.clear();
+        state.edits.clear();
+        state.folderPlan = null;
+        state.activePath = state.report.items?.some((item) => item.source_path === nextActivePath)
+          ? nextActivePath
+          : state.report.items?.[0]?.source_path || "";
+        render();
+        log(`Cleared analysis for ${payload.cleared || 0} file(s); removed ${payload.removed_caches || 0} cache file(s)`, payload.warnings?.length ? "warn" : "ok");
+        if (payload.warnings?.length) {
+          log(payload.warnings[0], "warn");
+        }
+      } catch (error) {
+        log(error.message, "fail");
+      } finally {
+        for (const id of buttonIds) {
+          $(id).disabled = false;
+        }
+        updateSelectionControls();
+      }
     }
 
     function shutdown() {
@@ -2579,6 +2631,7 @@
     $("organizeFolder").addEventListener("click", organizeFolder);
     $("analyze").addEventListener("click", analyzeSelected);
     $("analyzeAll").addEventListener("click", analyzeAll);
+    $("clearAnalysis").addEventListener("click", clearSelectedAnalysis);
     $("loadFolders").addEventListener("click", loadFolders);
     $("planFolders").addEventListener("click", planFolders);
     $("groupRoot").addEventListener("input", () => {
