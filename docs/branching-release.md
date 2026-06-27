@@ -65,6 +65,8 @@ fix: keep analysis cache stable after rename
 ci: publish checksum file with release assets
 ```
 
+`Release Notes` workflow는 `main`에 push될 때 commit subject를 기준으로 `CHANGELOG.md`를 갱신합니다. GitHub Release에 들어가는 릴리즈 노트는 tag push로 실행되는 `Release` workflow에서 같은 Conventional Commit 분류 규칙으로 다시 생성합니다.
+
 ## Release flow
 
 1. 릴리즈할 변경사항을 `main`에 머지합니다.
@@ -72,6 +74,16 @@ ci: publish checksum file with release assets
 3. `v0.1.0` 같은 annotated tag를 만들고 push합니다.
 4. `Release` workflow가 Linux, macOS, Windows용 archive를 빌드합니다.
 5. GitHub Release에 archive, release notes, `SHA256SUMS.txt`가 업로드됩니다.
+
+## Prerelease smoke release
+
+현재 작업물을 prerelease로 한 번 배포해보려면 `main` 또는 현재 검증된 브랜치에서 아래처럼 자동 릴리즈 브랜치로 push합니다.
+
+```bash
+git push origin HEAD:release/auto
+```
+
+이 push는 `Branch Auto Release` workflow를 실행합니다. workflow는 gofmt, vet, test를 통과한 뒤 릴리즈 노트 preview를 생성하고, `vX.Y.Z-auto.YYYYMMDD.RUN.SHORTSHA` tag를 push합니다. 그 tag가 `Release` workflow를 실행해 platform별 archive, checksums, GitHub prerelease notes를 발행합니다.
 
 ## Hotfixes
 

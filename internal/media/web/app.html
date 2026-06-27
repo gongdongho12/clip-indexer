@@ -44,6 +44,16 @@
       font: inherit;
     }
 
+    select {
+      font: inherit;
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 6px 9px;
+      background: #ffffff;
+      color: var(--ink);
+    }
+
     button {
       border: 1px solid var(--line);
       background: #ffffff;
@@ -176,7 +186,30 @@
       min-width: 0;
     }
 
-    .top-actions .primary {
+    .top-action-buttons {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .language-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .language-control select {
+      min-height: 32px;
+      max-width: 112px;
+      font-size: 13px;
+    }
+
+    .top-actions button {
       flex: 0 0 auto;
       white-space: nowrap;
     }
@@ -267,6 +300,11 @@
 
     tr:hover, tr.active {
       background: #f0f8f7;
+    }
+
+    tr.analyzing-row {
+      background: #eefaf9;
+      box-shadow: inset 3px 0 0 var(--accent);
     }
 
     .check-col {
@@ -366,6 +404,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 6px;
       min-height: 24px;
       max-width: 100%;
       padding: 2px 8px;
@@ -382,6 +421,26 @@
       border-color: var(--accent);
       background: #e7f7f6;
       color: var(--accent-strong);
+    }
+
+    .analysis-chip.analyzing {
+      padding-left: 7px;
+    }
+
+    .analysis-spinner {
+      width: 10px;
+      height: 10px;
+      flex: 0 0 auto;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 999px;
+      animation: spin 0.75s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     .analysis-chip.done {
@@ -745,7 +804,7 @@
     }
 
     .map-clip strong,
-    .map-clip span {
+    .map-clip > span {
       display: block;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -759,6 +818,19 @@
     .map-clip span {
       margin-top: 3px;
       color: var(--muted);
+      font-size: 12px;
+    }
+
+    .map-clip-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 7px;
+    }
+
+    .map-clip-actions button {
+      min-height: 28px;
+      padding: 0 8px;
       font-size: 12px;
     }
 
@@ -1273,7 +1345,19 @@
         <button id="showTagMap" type="button">Tag map</button>
       </nav>
       <div class="top-actions">
-        <button class="primary" id="organizeFolder" type="button">Analyze & Organize</button>
+        <div class="top-action-buttons">
+          <label class="language-control">Language
+            <select id="analysisLanguage">
+              <option value="auto">Auto</option>
+              <option value="ko">한국어</option>
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+              <option value="ja">日本語</option>
+            </select>
+          </label>
+          <button id="topAnalyzeSelected" type="button">Analyze selected</button>
+          <button class="primary" id="organizeFolder" type="button">Organize files</button>
+        </div>
         <div class="stats" id="stats"></div>
       </div>
     </header>
@@ -1381,6 +1465,7 @@
       heartbeatTimer: null,
       analysisStatus: null,
       analysisPollTimer: null,
+      analysisLanguage: "auto",
       folders: [],
       folderPlan: null,
       tagMapOpen: false
@@ -1450,6 +1535,10 @@
     async function loadReport() {
       const response = await fetch("/api/report");
       state.report = await response.json();
+      if (state.report.options?.analysis_language) {
+        state.analysisLanguage = state.report.options.analysis_language;
+        $("analysisLanguage").value = state.analysisLanguage;
+      }
       state.selected.clear();
       state.edits.clear();
       state.folderPlan = null;
@@ -1511,8 +1600,13 @@
       for (const item of filteredItems()) {
         const key = itemKey(item);
         const edit = getEdit(item);
+        const analysis = analysisStateFor(item);
         const tr = document.createElement("tr");
-        tr.className = state.activePath === key ? "active" : "";
+        tr.className = [
+          state.activePath === key ? "active" : "",
+          analysis.current ? "analyzing-row" : ""
+        ].filter(Boolean).join(" ");
+        tr.dataset.sourcePath = key;
         tr.innerHTML = `
           <td class="check-col"><input type="checkbox" ${state.selected.has(key) ? "checked" : ""} title="Select file"></td>
           <td>
@@ -1525,7 +1619,7 @@
             </div>
           </td>
           <td>${escapeHtml(formatDate(item.shot_at))}</td>
-          <td>${renderAnalysisBadge(item)}</td>
+          <td>${renderAnalysisBadge(item, analysis)}</td>
           <td>${renderGroupBadge(item)}</td>
           <td><input type="text" value="${escapeAttr(tagsText(edit.tags))}" title="Comma separated tags"></td>
           <td><input type="text" value="${escapeAttr(edit.final_file_name)}" title="Final filename"></td>
@@ -1812,6 +1906,11 @@
             <div class="map-clip" title="${escapeAttr(item.source_path)}">
               <strong>${escapeHtml(baseName(item.source_path))}</strong>
               <span>${escapeHtml(summary === "-" ? formatDate(item.shot_at) : summary)}</span>
+              <div class="map-clip-actions">
+                <button data-map-action="preview" data-path="${escapeAttr(item.source_path)}" type="button">Preview</button>
+                <button data-map-action="select" data-path="${escapeAttr(item.source_path)}" type="button">Select</button>
+                <button data-map-action="reveal" data-path="${escapeAttr(item.source_path)}" type="button">Reveal</button>
+              </div>
             </div>
           `;
         }).join("");
@@ -1916,9 +2015,10 @@
       }
     }
 
-    function renderAnalysisBadge(item) {
-      const state = analysisStateFor(item);
-      return `<span class="analysis-chip ${state.kind}" title="${escapeAttr(state.title)}">${escapeHtml(state.label)}</span>`;
+    function renderAnalysisBadge(item, analysis = analysisStateFor(item)) {
+      const classes = ["analysis-chip", analysis.kind, analysis.current ? "analyzing" : ""].filter(Boolean).join(" ");
+      const spinner = analysis.current ? `<span class="analysis-spinner" aria-hidden="true"></span>` : "";
+      return `<span class="${classes}" title="${escapeAttr(analysis.title)}">${spinner}${escapeHtml(analysis.label)}</span>`;
     }
 
     function renderGroupBadge(item) {
@@ -1934,14 +2034,14 @@
     function analysisStateFor(item) {
       const status = state.analysisStatus || {};
       const sourcePath = item.source_path;
+      if (status.current_source_path === sourcePath) {
+        return { label: "Analyzing", kind: "active", title: "LLM analysis is running for this file", current: true };
+      }
       if (item.content) {
         return { label: "Analyzed", kind: "done", title: "LLM content is available" };
       }
       if (item.location) {
         return { label: "GPS only", kind: "idle", title: "Location metadata exists, but no LLM scene analysis yet" };
-      }
-      if (status.current_source_path === sourcePath) {
-        return { label: "Analyzing", kind: "active", title: "LLM analysis is running for this file" };
       }
       if ((status.failed_source_paths || []).includes(sourcePath)) {
         return { label: "Warning", kind: "warn", title: "Analysis finished with a warning" };
@@ -1953,7 +2053,7 @@
         return {
           label: status.running ? "Queued" : "Pending",
           kind: status.running ? "active" : "idle",
-          title: status.running ? "Waiting for automatic analysis" : "Selected for automatic analysis"
+          title: status.running ? "Waiting for analysis" : "Selected for analysis"
         };
       }
       return { label: "Not analyzed", kind: "idle", title: "No LLM content yet" };
@@ -2113,11 +2213,11 @@
         return;
       }
       const scope = `${sourcePaths.length} selected file(s)`;
-      if (!window.confirm(`Analyze, rename, and move ${scope} into:\n${root}`)) {
+      if (!window.confirm(`Organize, rename, and move ${scope} into:\n${root}`)) {
         return;
       }
 
-      const buttonIds = ["organizeFolder", "analyze", "analyzeAll", "planFolders", "apply"];
+      const buttonIds = ["topAnalyzeSelected", "organizeFolder", "analyze", "analyzeAll", "planFolders", "apply"];
       for (const id of buttonIds) {
         $(id).disabled = true;
       }
@@ -2170,10 +2270,21 @@
       }
       try {
         log(`Analyzing ${sourcePaths.length} file(s)`, "warn");
+        state.analysisStatus = {
+          enabled: true,
+          running: true,
+          requested: sourcePaths.length,
+          analyzed: 0,
+          updated: 0,
+          source_paths: sourcePaths,
+          current_source_path: sourcePaths[0] || ""
+        };
+        renderAnalysisStatus();
+        renderRows();
         const response = await fetch("/api/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ source_paths: sourcePaths })
+          body: JSON.stringify({ source_paths: sourcePaths, analysis_language: state.analysisLanguage })
         });
         const payload = await readJSONResponse(response);
         const nextActivePath = sourcePaths.includes(state.activePath) ? state.activePath : sourcePaths[0];
@@ -2207,14 +2318,14 @@
         log("Select at least one file", "warn");
         return;
       }
-      await runAnalysis(sourcePaths, ["analyze", "analyzeAll"]);
+      await runAnalysis(sourcePaths, ["topAnalyzeSelected", "organizeFolder", "analyze", "analyzeAll"]);
     }
 
     async function analyzeAll() {
       const sourcePaths = (state.report?.items || [])
         .filter((item) => !item.content)
         .map((item) => item.source_path);
-      await runAnalysis(sourcePaths, ["analyze", "analyzeAll"]);
+      await runAnalysis(sourcePaths, ["topAnalyzeSelected", "organizeFolder", "analyze", "analyzeAll"]);
     }
 
     function shutdown() {
@@ -2240,7 +2351,7 @@
         clearInterval(state.analysisPollTimer);
       }
       loadAnalysisStatus();
-      state.analysisPollTimer = setInterval(loadAnalysisStatus, 5000);
+      state.analysisPollTimer = setInterval(loadAnalysisStatus, 1500);
     }
 
     function syncLayoutMetrics() {
@@ -2253,6 +2364,59 @@
       $("modalTitle").textContent = baseName(item.source_path);
       $("modalBody").innerHTML = `<video controls autoplay preload="metadata" src="/media?path=${encodeURIComponent(item.source_path)}"></video>`;
       $("previewModal").hidden = false;
+    }
+
+    function itemBySourcePath(sourcePath) {
+      return (state.report?.items || []).find((item) => item.source_path === sourcePath);
+    }
+
+    function selectFileFromMap(sourcePath) {
+      const item = itemBySourcePath(sourcePath);
+      if (!item) {
+        log("File is not in the current report", "warn");
+        return;
+      }
+      closeTagMap();
+      state.activePath = sourcePath;
+      state.selected.clear();
+      state.selected.add(sourcePath);
+      render();
+      requestAnimationFrame(() => {
+        const row = document.querySelector(`tr[data-source-path="${CSS.escape(sourcePath)}"]`);
+        row?.scrollIntoView({ block: "center", behavior: "smooth" });
+      });
+    }
+
+    async function revealFile(sourcePath) {
+      try {
+        const response = await fetch("/api/reveal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source_path: sourcePath })
+        });
+        await readJSONResponse(response);
+        log(`Revealed ${baseName(sourcePath)}`, "ok");
+      } catch (error) {
+        log(error.message, "fail");
+      }
+    }
+
+    function handleTagMapAction(event) {
+      const button = event.target.closest("button[data-map-action]");
+      if (!button) return;
+      const sourcePath = button.dataset.path || "";
+      const item = itemBySourcePath(sourcePath);
+      if (button.dataset.mapAction === "preview") {
+        if (item) openPreview(item);
+        return;
+      }
+      if (button.dataset.mapAction === "select") {
+        selectFileFromMap(sourcePath);
+        return;
+      }
+      if (button.dataset.mapAction === "reveal") {
+        revealFile(sourcePath);
+      }
     }
 
     function closePreview() {
@@ -2380,7 +2544,12 @@
     $("showFilesView").addEventListener("click", closeTagMap);
     $("showTagMap").addEventListener("click", openTagMap);
     $("copyMermaid").addEventListener("click", copyMermaid);
+    $("tagMapGraph").addEventListener("click", handleTagMapAction);
     $("refresh").addEventListener("click", loadReport);
+    $("analysisLanguage").addEventListener("change", () => {
+      state.analysisLanguage = $("analysisLanguage").value;
+    });
+    $("topAnalyzeSelected").addEventListener("click", analyzeSelected);
     $("organizeFolder").addEventListener("click", organizeFolder);
     $("analyze").addEventListener("click", analyzeSelected);
     $("analyzeAll").addEventListener("click", analyzeAll);

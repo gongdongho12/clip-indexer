@@ -33,6 +33,9 @@ func analysisCachePath(sourcePath string) string {
 }
 
 func applyAnalysisCache(item *Item) []string {
+	if os.Getenv("CLIP_INDEXER_SAVE_REAL") == "1" {
+		return nil
+	}
 	path := analysisCachePath(item.SourcePath)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -119,6 +122,9 @@ func saveAnalysisCache(item Item) error {
 		return err
 	}
 	path := analysisCachePath(item.SourcePath)
+	if os.Getenv("CLIP_INDEXER_SAVE_REAL") == "1" {
+		path = path + ".real"
+	}
 	return os.WriteFile(path, append(data, '\n'), 0o644)
 }
 

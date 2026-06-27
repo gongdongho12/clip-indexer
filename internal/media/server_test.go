@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -279,6 +280,60 @@ func TestHandleOrganizeWritesRootMapAndMovesFiles(t *testing.T) {
 	}
 }
 
+func TestHandleOrganizeDoesNotAnalyzePendingFiles(t *testing.T) {
+	dir := t.TempDir()
+	sourceDir := filepath.Join(dir, "input")
+	groupRoot := filepath.Join(dir, "organized")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(sourceDir, "clip.mp4")
+	if err := os.WriteFile(source, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &webServer{
+		report: Report{
+			Items: []Item{{
+				SourcePath:       source,
+				OriginalFileName: filepath.Base(source),
+				Extension:        ".mp4",
+				Video:            &VideoInfo{Codec: "h264"},
+				Tags:             []string{"city"},
+				FinalFileName:    "clip.mp4",
+			}},
+		},
+	}
+
+	body, err := json.Marshal(organizeRequest{
+		Root:        groupRoot,
+		SourcePaths: []string{source},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/organize", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+
+	server.handleOrganize(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload organizeResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Analyzed != 0 || payload.Updated != 0 {
+		t.Fatalf("organize should not run analysis, got analyzed=%d updated=%d", payload.Analyzed, payload.Updated)
+	}
+	for _, warning := range payload.Warnings {
+		if strings.Contains(warning, "organization analysis skipped") {
+			t.Fatalf("organize should not emit analysis warnings, got %q", warning)
+		}
+	}
+}
+
 func TestHandleOrganizeRequiresSelectedFiles(t *testing.T) {
 	dir := t.TempDir()
 	server := &webServer{
@@ -303,5 +358,43 @@ func TestHandleOrganizeRequiresSelectedFiles(t *testing.T) {
 
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("expected bad request, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestManualAnalysisStatusTracksCurrentAndCompletion(t *testing.T) {
+	server := &webServer{}
+	sourcePaths := []string{"/tmp/a.mp4", "/tmp/b.mp4"}
+
+	server.startAnalysisStatus(sourcePaths)
+	server.markAnalysisCurrent(sourcePaths[0])
+
+	request := httptest.NewRequest(http.MethodGet, "/api/analysis-status", nil)
+	response := httptest.NewRecorder()
+	server.handleAnalysisStatus(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", response.Code, response.Body.String())
+	}
+	var status analysisStatus
+	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	if !status.Running || status.CurrentSourcePath != sourcePaths[0] {
+		t.Fatalf("expected current analysis status, got %#v", status)
+	}
+
+	server.recordAnalysisResult(sourcePaths[0], 1, nil)
+	server.finishAnalysisStatus("")
+
+	response = httptest.NewRecorder()
+	server.handleAnalysisStatus(response, request)
+	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+		t.Fatalf("decode finished status: %v", err)
+	}
+	if status.Running || status.Analyzed != 1 || status.Updated != 1 {
+		t.Fatalf("expected finished analysis counts, got %#v", status)
+	}
+	if !slices.Contains(status.CompletedSourcePaths, sourcePaths[0]) {
+		t.Fatalf("expected completed source path, got %#v", status.CompletedSourcePaths)
 	}
 }

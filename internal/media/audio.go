@@ -125,7 +125,7 @@ func analyzeTranscriptWithLLM(ctx context.Context, cfg Config, item Item, transc
 		"messages": []map[string]string{
 			{
 				"role":    "system",
-				"content": "You organize travel video clips from audio transcripts. Return only JSON: {\"items\":[{\"source_path\":\"...\",\"tags\":[\"...\"],\"audio_summary\":\"...\",\"location_guess\":\"...\",\"location_confidence\":0.0,\"location_label\":\"...\",\"suggested_slug\":\"...\",\"final_file_name\":\"...\",\"notes\":\"...\"}]}. Extract concise tags from spoken words, announcements, business/place names, transit terms, foods, activities, languages, and travel context. If the transcript strongly suggests a known place, include location_label and also include the place name in tags. Be cautious and do not invent exact coordinates.",
+				"content": "You organize travel video clips from audio transcripts. Return only JSON: {\"items\":[{\"source_path\":\"...\",\"tags\":[\"...\"],\"audio_summary\":\"...\",\"location_guess\":\"...\",\"location_confidence\":0.0,\"location_label\":\"...\",\"suggested_slug\":\"...\",\"final_file_name\":\"...\",\"notes\":\"...\"}]}. Extract concise tags from spoken words, announcements, business/place names, transit terms, foods, activities, languages, and travel context. If the transcript strongly suggests a known place, include location_label and also include the place name in tags. Be cautious and do not invent exact coordinates. " + analysisLanguageInstruction(cfg),
 			},
 			{
 				"role":    "user",

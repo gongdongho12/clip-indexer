@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -120,6 +121,9 @@ func runServe(args []string, stdout, stderr io.Writer, envWarnings []string) err
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if fs.NArg() == 0 {
@@ -158,6 +162,7 @@ func (s *webServer) serve(stdout io.Writer) error {
 	mux.HandleFunc("/api/folders", s.handleFolders)
 	mux.HandleFunc("/api/folder-plan", s.handleFolderPlan)
 	mux.HandleFunc("/api/organize", s.handleOrganize)
+	mux.HandleFunc("/api/reveal", s.handleReveal)
 	mux.HandleFunc("/api/ping", s.handlePing)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
 	mux.HandleFunc("/media", s.handleMedia)
@@ -264,8 +269,9 @@ func (s *webServer) handleApply(w http.ResponseWriter, r *http.Request) {
 }
 
 type analyzeRequest struct {
-	SourcePaths []string `json:"source_paths"`
-	Frames      int      `json:"frames,omitempty"`
+	SourcePaths      []string `json:"source_paths"`
+	Frames           int      `json:"frames,omitempty"`
+	AnalysisLanguage string   `json:"analysis_language,omitempty"`
 }
 
 type analyzeResponse struct {
@@ -273,6 +279,10 @@ type analyzeResponse struct {
 	Updated  int      `json:"updated"`
 	Warnings []string `json:"warnings,omitempty"`
 	Report   Report   `json:"report"`
+}
+
+type revealRequest struct {
+	SourcePath string `json:"source_path"`
 }
 
 type folderListRequest struct {
@@ -383,6 +393,10 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	if request.Frames > 0 {
 		cfg.VisionFrames = request.Frames
 	}
+	if strings.TrimSpace(request.AnalysisLanguage) != "" {
+		cfg.AnalysisLanguage = request.AnalysisLanguage
+	}
+	cfg.AnalysisLanguage = normalizeAnalysisLanguage(cfg.AnalysisLanguage)
 	cfg.VisionMaxItems = len(request.SourcePaths)
 	cfg.AudioMaxItems = len(request.SourcePaths)
 	if err := validateConfig(cfg); err != nil {
@@ -417,17 +431,21 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(max(1, cfg.LLMTimeoutSeconds*len(sourcePaths)*2))*time.Second)
 	defer cancel()
 	progress := s.newAnalysisProgress("Manual analysis", len(sourcePaths))
+	s.startAnalysisStatus(sourcePaths)
 	progress.start()
 	warnings := []string{}
 	updated := 0
 	for index, sourcePath := range sourcePaths {
+		s.markAnalysisCurrent(sourcePath)
 		progress.update(index, filepath.Base(sourcePath), updated, len(warnings))
 		nextWarnings, nextUpdated := s.analyzeSourcePath(ctx, cfg, sourcePath, analysisRunOptions{MaxItems: len(sourcePaths)})
 		warnings = append(warnings, nextWarnings...)
 		updated += nextUpdated
+		s.recordAnalysisResult(sourcePath, nextUpdated, nextWarnings)
 		progress.update(index+1, filepath.Base(sourcePath), updated, len(warnings))
 	}
 	progress.finish(len(sourcePaths), updated, len(warnings), "")
+	s.finishAnalysisStatus("")
 
 	s.mu.RLock()
 	report := s.report
@@ -576,7 +594,7 @@ func (s *webServer) handleOrganize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	warnings := []string{}
-	analyzed, updated := s.analyzeForOrganization(r.Context(), sourcePaths, &warnings)
+	analyzed, updated := 0, 0
 
 	existingFolders, folderWarnings, err := listSubfolders(absRoot, request.Depth)
 	if err != nil {
@@ -974,8 +992,12 @@ func (s *webServer) analyzeSourcePath(ctx context.Context, cfg Config, sourcePat
 	s.report.Options.LLMAudio = cfg.UseLLMAudio
 	s.report.Options.AutoAnalyze = s.cfg.AutoAnalyze
 	s.report.Options.AutoAnalyzeMaxItems = s.cfg.AutoAnalyzeMaxItems
+	s.report.Options.AnalysisLanguage = normalizeAnalysisLanguage(cfg.AnalysisLanguage)
+	s.report.Options.VisionAdaptive = cfg.VisionAdaptive
 	s.report.Options.VisionFrames = cfg.VisionFrames
+	s.report.Options.VisionSampleIntervalSeconds = cfg.VisionSampleIntervalSeconds
 	s.report.Options.VisionMaxItems = options.MaxItems
+	s.report.Options.VisionPromptFile = cfg.VisionPromptFile
 	s.report.Options.AudioMaxSeconds = cfg.AudioMaxSeconds
 	s.report.Options.AudioMaxItems = options.MaxItems
 	s.report.Warnings = append(s.report.Warnings, warnings...)
@@ -997,6 +1019,35 @@ func (s *webServer) markAnalysisCurrent(sourcePath string) {
 	s.analysisMu.Lock()
 	s.analysisStatus.CurrentSourcePath = sourcePath
 	s.analysisMu.Unlock()
+}
+
+func (s *webServer) startAnalysisStatus(sourcePaths []string) {
+	now := time.Now().Format(time.RFC3339)
+	s.analysisMu.Lock()
+	s.analysisStatus = analysisStatus{
+		Enabled:     true,
+		Running:     len(sourcePaths) > 0,
+		Requested:   len(sourcePaths),
+		SourcePaths: append([]string{}, sourcePaths...),
+		StartedAt:   now,
+	}
+	if len(sourcePaths) == 0 {
+		s.analysisStatus.FinishedAt = now
+	}
+	s.analysisMu.Unlock()
+}
+
+func (s *webServer) recordAnalysisResult(sourcePath string, updated int, warnings []string) {
+	s.analysisMu.Lock()
+	defer s.analysisMu.Unlock()
+	s.analysisStatus.Analyzed++
+	s.analysisStatus.Updated += updated
+	s.analysisStatus.CurrentSourcePath = ""
+	s.analysisStatus.CompletedSourcePaths = appendUniqueString(s.analysisStatus.CompletedSourcePaths, sourcePath)
+	if len(warnings) > 0 {
+		s.analysisStatus.FailedSourcePaths = appendUniqueString(s.analysisStatus.FailedSourcePaths, sourcePath)
+	}
+	s.analysisStatus.Warnings = appendLimitedWarnings(s.analysisStatus.Warnings, warnings, 20)
 }
 
 func (s *webServer) analysisIsRunning() bool {
@@ -1305,6 +1356,46 @@ func (s *webServer) handleShutdown(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
+func (s *webServer) handleReveal(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var request revealRequest
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	if err := decoder.Decode(&request); err != nil {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	sourcePath := strings.TrimSpace(request.SourcePath)
+	if sourcePath == "" {
+		http.Error(w, "source_path is required", http.StatusBadRequest)
+		return
+	}
+	if !s.reportHasSourcePath(sourcePath) {
+		http.Error(w, "file is not part of the current report", http.StatusForbidden)
+		return
+	}
+	if err := revealFile(sourcePath); err != nil {
+		http.Error(w, "could not reveal file: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "revealed"})
+}
+
+func revealFile(path string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", "-R", path).Start()
+	case "windows":
+		return exec.Command("explorer", "/select,"+path).Start()
+	default:
+		return exec.Command("xdg-open", filepath.Dir(path)).Start()
+	}
+}
+
 func (s *webServer) markClientSeen() {
 	s.clientMu.Lock()
 	s.lastClient = time.Now()
@@ -1344,16 +1435,19 @@ func (s *webServer) handleMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mu.RLock()
-	allowed := slices.ContainsFunc(s.report.Items, func(item Item) bool {
-		return item.SourcePath == path
-	})
-	s.mu.RUnlock()
-	if !allowed {
+	if !s.reportHasSourcePath(path) {
 		http.Error(w, "file is not part of the current report", http.StatusForbidden)
 		return
 	}
 	http.ServeFile(w, r, path)
+}
+
+func (s *webServer) reportHasSourcePath(path string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return slices.ContainsFunc(s.report.Items, func(item Item) bool {
+		return item.SourcePath == path
+	})
 }
 
 func writeJSON(w http.ResponseWriter, value any) {

@@ -1,0 +1,102 @@
+# ---------------------------------------------------------------
+# Release Notes — auto-generate & commit CHANGELOG.md on push
+# ---------------------------------------------------------------
+# Triggers on pushes to main. Uses the conventional-commit
+# conventions from .github/scripts/release_notes.py to keep
+# CHANGELOG.md up-to-date automatically.
+#
+# The changelog generator writes intermediate files to a work
+# directory (.changelog-work/) which are uploaded as a build
+# artifact for debugging. This avoids git-log stdout truncation
+# when there are thousands of commits.
+# ---------------------------------------------------------------
+
+name: Release Notes
+
+on:
+  push:
+    branches: [main]
+
+# Prevent concurrent changelog updates.
+concurrency:
+  group: release-notes-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  update-changelog:
+    name: Update CHANGELOG.md
+    runs-on: ubuntu-latest
+
+    # Skip if the triggering commit is the bot's own changelog update.
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      # ----------------------------------------------------------
+      # 1. Full checkout (need full history for git log & tags)
+      # ----------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Use the default GITHUB_TOKEN so the bot can push.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ----------------------------------------------------------
+      # 2. Restore changelog state cache
+      # ----------------------------------------------------------
+      - name: Restore changelog state
+        uses: actions/cache@v4
+        with:
+          path: .changelog-work
+          key: changelog-state-${{ github.sha }}
+          restore-keys: |
+            changelog-state-
+
+      # ----------------------------------------------------------
+      # 3. Set up Python
+      # ----------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ----------------------------------------------------------
+      # 4. Run the changelog generator
+      # ----------------------------------------------------------
+      - name: Generate changelog entry
+        env:
+          CHANGELOG_WORK_DIR: .changelog-work
+        run: python .github/scripts/update_changelog.py CHANGELOG.md
+
+      # ----------------------------------------------------------
+      # 5. Upload work directory as artifact (for debugging)
+      # ----------------------------------------------------------
+      - name: Upload changelog artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog-work-${{ github.run_id }}
+          path: .changelog-work/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # ----------------------------------------------------------
+      # 6. Commit & push (only if CHANGELOG.md changed)
+      # ----------------------------------------------------------
+      - name: Commit updated CHANGELOG.md
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add CHANGELOG.md
+
+          # Only commit if there are staged changes.
+          if git diff --cached --quiet; then
+            echo "No changelog changes to commit."
+          else
+            git commit -m "docs: update CHANGELOG.md [skip ci]"
+            git push
+          fi

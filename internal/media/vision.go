@@ -5,11 +5,24 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
+
+const (
+	defaultVisionSystemPrompt     = "You analyze chronologically sampled travel video frames. Use all frames together rather than overfitting to one image. Infer visible scene content, activities, useful concise tags, and a cautious location guess if landmarks, signs, transit names, coastline, mountains, buildings, or other visual clues support it. For short clips, look for stable details across beginning, middle, and end frames. For longer clips, summarize the dominant scene and note meaningful changes. Include scene/activity tags such as street, restaurant, hotel, airport, train, beach, mountain, night_view, walking, driving, food, people, indoor, outdoor. If a place is visually identifiable, include location_label and also include that place name in tags. Do not invent precise coordinates. Return only JSON: {\"items\":[{\"source_path\":\"...\",\"tags\":[\"...\"],\"scene_summary\":\"...\",\"location_guess\":\"...\",\"location_confidence\":0.0,\"location_label\":\"...\",\"suggested_slug\":\"...\",\"final_file_name\":\"...\",\"notes\":\"...\"}]}"
+	minAdaptiveVisionFrames       = 4
+	maxAdaptiveVisionFrames       = 8
+	adaptiveVisionSecondsPerFrame = 12
+)
+
+type visionFrame struct {
+	Second float64
+	Data   []byte
+}
 
 type visionItemInput struct {
 	SourcePath          string        `json:"source_path"`
@@ -101,22 +114,29 @@ func analyzeItemWithVision(ctx context.Context, cfg Config, item Item) (*visionI
 			"text": "Analyze these sampled frames and metadata. Return JSON only.\n\n" + string(metadata),
 		},
 	}
-	for _, frame := range frames {
+	for index, frame := range frames {
+		userContent = append(userContent, map[string]any{
+			"type": "text",
+			"text": fmt.Sprintf("Frame %d/%d at %.1fs", index+1, len(frames), frame.Second),
+		})
 		userContent = append(userContent, map[string]any{
 			"type": "image_url",
 			"image_url": map[string]any{
-				"url":    "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(frame),
+				"url":    "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(frame.Data),
 				"detail": "low",
 			},
 		})
 	}
 
+	systemPrompt, promptWarning := visionSystemPrompt(cfg)
+	systemPrompt = strings.TrimSpace(systemPrompt + " " + analysisLanguageInstruction(cfg))
+	warnings := append([]string{}, promptWarning...)
 	requestBody := map[string]any{
 		"model": cfg.LLMModel,
 		"messages": []map[string]any{
 			{
 				"role":    "system",
-				"content": "You analyze travel video frames. Infer visible scene content, useful concise tags, and a cautious location guess if landmarks, signs, transit names, coastline, mountains, buildings, or other visual clues support it. Include scene/activity tags such as street, restaurant, hotel, airport, train, beach, mountain, night_view, walking, driving, food, people, indoor, outdoor. If a place is visually identifiable, include location_label and also include that place name in tags. Do not invent precise coordinates. Return only JSON: {\"items\":[{\"source_path\":\"...\",\"tags\":[\"...\"],\"scene_summary\":\"...\",\"location_guess\":\"...\",\"location_confidence\":0.0,\"location_label\":\"...\",\"suggested_slug\":\"...\",\"final_file_name\":\"...\",\"notes\":\"...\"}]}",
+				"content": systemPrompt,
 			},
 			{
 				"role":    "user",
@@ -128,22 +148,37 @@ func analyzeItemWithVision(ctx context.Context, cfg Config, item Item) (*visionI
 
 	content, err := callChatCompletion(ctx, cfg, requestBody)
 	if err != nil {
-		return nil, len(frames), []string{fmt.Sprintf("vision LLM failed for %s: %v", item.SourcePath, err)}
+		return nil, len(frames), append(warnings, fmt.Sprintf("vision LLM failed for %s: %v", item.SourcePath, err))
 	}
 
 	var output visionOutput
 	if err := json.Unmarshal([]byte(content), &output); err != nil {
-		return nil, len(frames), []string{fmt.Sprintf("could not parse vision JSON for %s: %v", item.SourcePath, err)}
+		return nil, len(frames), append(warnings, fmt.Sprintf("could not parse vision JSON for %s: %v", item.SourcePath, err))
 	}
 	if len(output.Items) == 0 {
-		return nil, len(frames), []string{fmt.Sprintf("vision response had no items for %s", item.SourcePath)}
+		return nil, len(frames), append(warnings, fmt.Sprintf("vision response had no items for %s", item.SourcePath))
 	}
 	for _, suggestion := range output.Items {
 		if suggestion.SourcePath == item.SourcePath {
-			return &suggestion, len(frames), nil
+			return &suggestion, len(frames), warnings
 		}
 	}
-	return &output.Items[0], len(frames), []string{fmt.Sprintf("vision response did not echo source_path for %s", item.SourcePath)}
+	return &output.Items[0], len(frames), append(warnings, fmt.Sprintf("vision response did not echo source_path for %s", item.SourcePath))
+}
+
+func visionSystemPrompt(cfg Config) (string, []string) {
+	if strings.TrimSpace(cfg.VisionPromptFile) == "" {
+		return defaultVisionSystemPrompt, nil
+	}
+	data, err := os.ReadFile(cfg.VisionPromptFile)
+	if err != nil {
+		return defaultVisionSystemPrompt, []string{fmt.Sprintf("vision prompt file read failed for %s: %v", cfg.VisionPromptFile, err)}
+	}
+	prompt := strings.TrimSpace(string(data))
+	if prompt == "" {
+		return defaultVisionSystemPrompt, []string{fmt.Sprintf("vision prompt file is empty: %s", cfg.VisionPromptFile)}
+	}
+	return prompt, nil
 }
 
 func applyVisionOutput(item *Item, suggestion visionItemOutput, frameCount int, model string) {
@@ -190,7 +225,7 @@ func applyVisionOutput(item *Item, suggestion visionItemOutput, frameCount int, 
 	}
 }
 
-func extractVisionFrames(ctx context.Context, cfg Config, item Item) ([][]byte, func(), error) {
+func extractVisionFrames(ctx context.Context, cfg Config, item Item) ([]visionFrame, func(), error) {
 	tempDir, err := os.MkdirTemp("", "clip-indexer-frames-*")
 	if err != nil {
 		return nil, nil, err
@@ -199,8 +234,8 @@ func extractVisionFrames(ctx context.Context, cfg Config, item Item) ([][]byte, 
 		_ = os.RemoveAll(tempDir)
 	}
 
-	count := max(1, cfg.VisionFrames)
-	var frames [][]byte
+	count := visionFrameCount(item.DurationSeconds, cfg)
+	var frames []visionFrame
 	for index, second := range sampleSeconds(item.DurationSeconds, count) {
 		framePath := filepath.Join(tempDir, fmt.Sprintf("frame_%02d.jpg", index+1))
 		cmd := exec.CommandContext(
@@ -231,9 +266,31 @@ func extractVisionFrames(ctx context.Context, cfg Config, item Item) ([][]byte, 
 			cleanup()
 			return nil, nil, err
 		}
-		frames = append(frames, data)
+		frames = append(frames, visionFrame{Second: second, Data: data})
 	}
 	return frames, cleanup, nil
+}
+
+func visionFrameCount(duration float64, cfg Config) int {
+	configured := max(1, cfg.VisionFrames)
+	if cfg.VisionSampleIntervalSeconds > 0 {
+		if duration <= 0 {
+			return configured
+		}
+		count := max(1, int(math.Ceil(duration/float64(cfg.VisionSampleIntervalSeconds))))
+		if !cfg.VisionAdaptive {
+			return count
+		}
+		return clampInt(count, max(minAdaptiveVisionFrames, configured), max(maxAdaptiveVisionFrames, configured))
+	}
+	if !cfg.VisionAdaptive {
+		return configured
+	}
+	if duration <= 0 {
+		return max(minAdaptiveVisionFrames, configured)
+	}
+	count := int(math.Ceil(duration/float64(adaptiveVisionSecondsPerFrame))) + 2
+	return clampInt(count, max(minAdaptiveVisionFrames, configured), max(maxAdaptiveVisionFrames, configured))
 }
 
 func sampleSeconds(duration float64, count int) []float64 {
@@ -243,15 +300,44 @@ func sampleSeconds(duration float64, count int) []float64 {
 	if duration <= 0 {
 		duration = 1
 	}
+	if count == 1 {
+		return []float64{clampSecond(duration/2, duration)}
+	}
+
+	margin := math.Min(0.8, math.Max(0.1, duration*0.08))
+	start := clampSecond(margin, duration)
+	end := clampSecond(duration-margin, duration)
+	if end < start {
+		end = start
+	}
+
 	var seconds []float64
-	for i := 1; i <= count; i++ {
-		second := duration * float64(i) / float64(count+1)
-		if second < 0.1 {
-			second = 0.1
-		}
+	for i := 0; i < count; i++ {
+		ratio := float64(i) / float64(count-1)
+		second := start + (end-start)*ratio
 		seconds = append(seconds, second)
 	}
 	return seconds
+}
+
+func clampSecond(second float64, duration float64) float64 {
+	if second < 0.1 {
+		return 0.1
+	}
+	if duration > 0 && second > duration {
+		return duration
+	}
+	return second
+}
+
+func clampInt(value int, minimum int, maximum int) int {
+	if value < minimum {
+		return minimum
+	}
+	if value > maximum {
+		return maximum
+	}
+	return value
 }
 
 func clamp01(value float64) float64 {

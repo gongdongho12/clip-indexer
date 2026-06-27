@@ -44,3 +44,5 @@ __pycache__/
 !/.codex/skills/
 !/.codex/skills/auto-release-manager/
 !/.codex/skills/auto-release-manager/**
+.changelog-work/
+.changelog-state.json

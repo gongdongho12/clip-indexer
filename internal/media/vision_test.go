@@ -1,17 +1,59 @@
 package media
 
 import (
+	"math"
 	"slices"
 	"testing"
 )
 
 func TestSampleSeconds(t *testing.T) {
-	got := sampleSeconds(9, 2)
-	if len(got) != 2 {
-		t.Fatalf("expected two samples, got %v", got)
+	got := sampleSeconds(10, 4)
+	want := []float64{0.8, 3.6, 6.4, 9.2}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d samples, got %v", len(want), got)
 	}
-	if got[0] != 3 || got[1] != 6 {
-		t.Fatalf("unexpected samples: %v", got)
+	for index := range want {
+		if !closeFloat(got[index], want[index]) {
+			t.Fatalf("unexpected samples: got %v want %v", got, want)
+		}
+	}
+}
+
+func TestSampleSecondsSingleFrameUsesMiddle(t *testing.T) {
+	got := sampleSeconds(9, 1)
+	if len(got) != 1 {
+		t.Fatalf("expected one sample, got %v", got)
+	}
+	if !closeFloat(got[0], 4.5) {
+		t.Fatalf("expected middle sample, got %v", got)
+	}
+}
+
+func TestVisionFrameCountUsesIntervalWhenConfigured(t *testing.T) {
+	got := visionFrameCount(10, Config{VisionFrames: 2, VisionAdaptive: true, VisionSampleIntervalSeconds: 3})
+	if got != 4 {
+		t.Fatalf("expected four interval samples, got %d", got)
+	}
+}
+
+func TestVisionFrameCountAdaptsShortClips(t *testing.T) {
+	got := visionFrameCount(10, Config{VisionFrames: 2, VisionAdaptive: true})
+	if got != 4 {
+		t.Fatalf("expected short clips to use four samples, got %d", got)
+	}
+}
+
+func TestVisionFrameCountAdaptsLongClipsWithLimit(t *testing.T) {
+	got := visionFrameCount(120, Config{VisionFrames: 2, VisionAdaptive: true})
+	if got != 8 {
+		t.Fatalf("expected long clips to cap adaptive samples, got %d", got)
+	}
+}
+
+func TestVisionFrameCountFallsBackToFixedFrames(t *testing.T) {
+	got := visionFrameCount(10, Config{VisionFrames: 2, VisionAdaptive: false})
+	if got != 2 {
+		t.Fatalf("expected fixed frame count, got %d", got)
 	}
 }
 
@@ -57,4 +99,8 @@ func TestApplyVisionOutputAddsSceneAndLocationTags(t *testing.T) {
 	if item.Location == nil || item.Location.Label != "서울 시청" {
 		t.Fatalf("expected location label: %#v", item.Location)
 	}
+}
+
+func closeFloat(left float64, right float64) bool {
+	return math.Abs(left-right) < 0.0001
 }

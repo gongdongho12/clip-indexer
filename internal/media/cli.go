@@ -27,8 +27,12 @@ func Run(args []string, stdout, stderr io.Writer) error {
 	envWarnings := loadEnvFiles(".env.local", ".env")
 	if len(args) > 0 {
 		switch args[0] {
+		case "dev":
+			return runDev(args[1:], stdout, stderr)
 		case "serve":
 			return runServe(args[1:], stdout, stderr, envWarnings)
+		case "review":
+			return runReview(args[1:], stdout, stderr, envWarnings)
 		case "index":
 			return runIndex(args[1:], stdout, stderr, envWarnings)
 		case "help", "-h", "--help":
@@ -46,10 +50,14 @@ func printRootUsage(stderr io.Writer) {
 	fmt.Fprintf(stderr, "Usage: %s <command> [flags] <video-file-or-directory>...\n\n", cliName)
 	fmt.Fprintln(stderr, "Commands:")
 	fmt.Fprintln(stderr, "  index    emit a JSON report (default)")
+	fmt.Fprintln(stderr, "  review   write a dry-run review bundle with Mermaid and folder plans")
 	fmt.Fprintln(stderr, "  serve    launch the local file-manager web UI")
+	fmt.Fprintln(stderr, "  dev      run the web UI and restart it when source files change")
 	fmt.Fprintln(stderr, "\nExamples:")
 	fmt.Fprintf(stderr, "  %s --pretty --trip seoul ~/Movies/trip\n", cliName)
+	fmt.Fprintf(stderr, "  %s review --trip seoul --dest-root ~/Movies/organized ~/Movies/trip\n", cliName)
 	fmt.Fprintf(stderr, "  %s serve --trip seoul ~/Movies/trip\n", cliName)
+	fmt.Fprintf(stderr, "  %s dev --trip seoul ~/Movies/trip\n", cliName)
 }
 
 func runIndex(args []string, stdout, stderr io.Writer, envWarnings []string) error {
@@ -69,6 +77,9 @@ func runIndex(args []string, stdout, stderr io.Writer, envWarnings []string) err
 	}
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if showVersion {
@@ -104,16 +115,23 @@ func addIndexFlags(fs *flag.FlagSet, cfg *Config) {
 	fs.StringVar(&cfg.Trip, "trip", cfg.Trip, "trip or project name to include in suggested filenames")
 	fs.StringVar(&cfg.FFProbePath, "ffprobe", cfg.FFProbePath, "path to ffprobe executable")
 	fs.StringVar(&cfg.FFMpegPath, "ffmpeg", cfg.FFMpegPath, "path to ffmpeg executable for vision frame extraction")
+	fs.StringVar(&cfg.AnalysisLanguage, "analysis-language", cfg.AnalysisLanguage, "analysis output language: auto, ko, en, zh, or ja")
 	fs.BoolVar(&cfg.UseLLM, "llm", cfg.UseLLM, "enrich tags and final filenames with an OpenAI-compatible chat endpoint")
 	fs.BoolVar(&cfg.UseLLMVision, "llm-vision", cfg.UseLLMVision, "sample video frames and ask the LLM for scene and location hints")
 	fs.BoolVar(&cfg.UseLLMAudio, "llm-audio", cfg.UseLLMAudio, "extract audio and ask the LLM for transcript, sound tags, and spoken context")
-	fs.IntVar(&cfg.VisionFrames, "vision-frames", cfg.VisionFrames, "number of frames to sample per video when --llm-vision is enabled")
+	fs.BoolVar(&cfg.VisionAdaptive, "vision-adaptive", cfg.VisionAdaptive, "adapt vision frame sampling to clip duration; disable to use --vision-frames exactly")
+	fs.IntVar(&cfg.VisionFrames, "vision-frames", cfg.VisionFrames, "minimum frames to sample per video when adaptive vision is enabled; exact count when --vision-adaptive=false")
+	fs.IntVar(&cfg.VisionSampleIntervalSeconds, "vision-sample-interval", cfg.VisionSampleIntervalSeconds, "sample one vision frame about every N seconds; 0 uses adaptive duration sampling or --vision-frames")
 	fs.IntVar(&cfg.VisionMaxItems, "vision-max-items", cfg.VisionMaxItems, "maximum videos to analyze with --llm-vision; 0 means all")
+	fs.StringVar(&cfg.VisionPromptFile, "vision-prompt-file", cfg.VisionPromptFile, "path to a custom system prompt for --llm-vision")
 	fs.IntVar(&cfg.AudioMaxSeconds, "audio-max-seconds", cfg.AudioMaxSeconds, "maximum seconds of audio to transcribe per video when --llm-audio is enabled")
 	fs.IntVar(&cfg.AudioMaxItems, "audio-max-items", cfg.AudioMaxItems, "maximum videos to analyze with --llm-audio; 0 means all")
 	fs.StringVar(&cfg.AudioModel, "audio-model", cfg.AudioModel, "audio transcription model name")
 	fs.StringVar(&cfg.LLMBaseURL, "llm-base-url", cfg.LLMBaseURL, "LLM API base URL")
-	fs.StringVar(&cfg.LLMAPIKey, "llm-api-key", cfg.LLMAPIKey, "LLM API key")
+	fs.Func("llm-api-key", "LLM API key", func(value string) error {
+		cfg.LLMAPIKey = value
+		return nil
+	})
 	fs.StringVar(&cfg.LLMModel, "llm-model", cfg.LLMModel, "LLM model name")
 	fs.IntVar(&cfg.LLMTimeoutSeconds, "llm-timeout", cfg.LLMTimeoutSeconds, "LLM request timeout in seconds")
 }
@@ -136,17 +154,21 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 		},
 		GeneratedAt: time.Now().Format(time.RFC3339),
 		Options: ReportOptions{
-			Recursive:           cfg.Recursive,
-			Trip:                cfg.Trip,
-			LLM:                 cfg.UseLLM,
-			LLMVision:           cfg.UseLLMVision,
-			LLMAudio:            cfg.UseLLMAudio,
-			AutoAnalyze:         cfg.AutoAnalyze,
-			AutoAnalyzeMaxItems: cfg.AutoAnalyzeMaxItems,
-			VisionFrames:        cfg.VisionFrames,
-			VisionMaxItems:      cfg.VisionMaxItems,
-			AudioMaxSeconds:     cfg.AudioMaxSeconds,
-			AudioMaxItems:       cfg.AudioMaxItems,
+			Recursive:                   cfg.Recursive,
+			Trip:                        cfg.Trip,
+			AnalysisLanguage:            normalizeAnalysisLanguage(cfg.AnalysisLanguage),
+			LLM:                         cfg.UseLLM,
+			LLMVision:                   cfg.UseLLMVision,
+			LLMAudio:                    cfg.UseLLMAudio,
+			AutoAnalyze:                 cfg.AutoAnalyze,
+			AutoAnalyzeMaxItems:         cfg.AutoAnalyzeMaxItems,
+			VisionAdaptive:              cfg.VisionAdaptive,
+			VisionFrames:                cfg.VisionFrames,
+			VisionSampleIntervalSeconds: cfg.VisionSampleIntervalSeconds,
+			VisionMaxItems:              cfg.VisionMaxItems,
+			VisionPromptFile:            cfg.VisionPromptFile,
+			AudioMaxSeconds:             cfg.AudioMaxSeconds,
+			AudioMaxItems:               cfg.AudioMaxItems,
 		},
 		Warnings: append([]string{}, discoveryWarnings...),
 	}
@@ -192,6 +214,9 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 }
 
 func validateConfig(cfg Config) error {
+	if normalizeAnalysisLanguage(cfg.AnalysisLanguage) == "" {
+		return errors.New("--analysis-language must be one of auto, ko, en, zh, ja")
+	}
 	if cfg.UseLLMVision || cfg.UseLLMAudio {
 		cfg.UseLLM = true
 	}
@@ -201,6 +226,14 @@ func validateConfig(cfg Config) error {
 		}
 		if cfg.VisionMaxItems < 0 {
 			return errors.New("--vision-max-items must be 0 or greater")
+		}
+		if cfg.VisionSampleIntervalSeconds < 0 {
+			return errors.New("--vision-sample-interval must be 0 or greater")
+		}
+		if strings.TrimSpace(cfg.VisionPromptFile) != "" {
+			if _, err := os.Stat(cfg.VisionPromptFile); err != nil {
+				return fmt.Errorf("--vision-prompt-file is not readable: %w", err)
+			}
 		}
 	}
 	if cfg.UseLLMAudio {
@@ -225,6 +258,38 @@ func validateConfig(cfg Config) error {
 	return nil
 }
 
+func normalizeAnalysisLanguage(language string) string {
+	switch strings.ToLower(strings.TrimSpace(language)) {
+	case "", "auto", "default":
+		return "auto"
+	case "ko", "kr", "korean", "한국어":
+		return "ko"
+	case "en", "eng", "english":
+		return "en"
+	case "zh", "cn", "chinese", "中文", "중국어":
+		return "zh"
+	case "ja", "jp", "japanese", "日本語", "일본어":
+		return "ja"
+	default:
+		return ""
+	}
+}
+
+func analysisLanguageInstruction(cfg Config) string {
+	switch normalizeAnalysisLanguage(cfg.AnalysisLanguage) {
+	case "ko":
+		return "Write scene_summary, audio_summary, notes, suggested_slug, final_file_name, and natural-language tags in Korean when possible. Keep proper nouns and place names in their original script when that is clearer."
+	case "en":
+		return "Write scene_summary, audio_summary, notes, suggested_slug, final_file_name, and natural-language tags in English."
+	case "zh":
+		return "Write scene_summary, audio_summary, notes, suggested_slug, final_file_name, and natural-language tags in Chinese when possible. Keep proper nouns and place names in their original script when that is clearer."
+	case "ja":
+		return "Write scene_summary, audio_summary, notes, suggested_slug, final_file_name, and natural-language tags in Japanese when possible. Keep proper nouns and place names in their original script when that is clearer."
+	default:
+		return "Choose the output language from the clip context and existing metadata; preserve meaningful Korean, English, Chinese, and Japanese words instead of forcing translation."
+	}
+}
+
 func versionString() string {
 	if commit == "unknown" && date == "unknown" {
 		return fmt.Sprintf("%s %s", cliName, version)
@@ -245,22 +310,26 @@ func analysisItemCount(limit int, itemCount int) int {
 
 func defaultConfig() Config {
 	return Config{
-		FFProbePath:         envOr("FFPROBE_PATH", "ffprobe"),
-		FFMpegPath:          envOr("FFMPEG_PATH", "ffmpeg"),
-		Recursive:           envBoolOr("CLIP_INDEXER_RECURSIVE", true),
-		Host:                envOr("CLIP_INDEXER_HOST", "127.0.0.1"),
-		Port:                envIntOr("CLIP_INDEXER_PORT", 4317),
-		AutoAnalyze:         envBoolOr("CLIP_INDEXER_AUTO_ANALYZE", false),
-		AutoAnalyzeMaxItems: envIntOr("CLIP_INDEXER_AUTO_ANALYZE_MAX_ITEMS", 3),
-		VisionFrames:        envIntOr("CLIP_INDEXER_VISION_FRAMES", 2),
-		VisionMaxItems:      envIntOr("CLIP_INDEXER_VISION_MAX_ITEMS", 12),
-		AudioMaxSeconds:     envIntOr("CLIP_INDEXER_AUDIO_MAX_SECONDS", 45),
-		AudioMaxItems:       envIntOr("CLIP_INDEXER_AUDIO_MAX_ITEMS", 12),
-		AudioModel:          envOrAny("whisper-1", "LLM_AUDIO_MODEL", "OPENAI_AUDIO_MODEL"),
-		LLMBaseURL:          envOrAny("https://api.openai.com/v1", "LLM_BASE_URL", "OPENAI_BASE_URL"),
-		LLMAPIKey:           envOrAny("", "LLM_API_KEY", "OPENAI_API_KEY"),
-		LLMModel:            envOrAny("", "LLM_MODEL", "OPENAI_MODEL"),
-		LLMTimeoutSeconds:   30,
+		FFProbePath:                 envOr("FFPROBE_PATH", "ffprobe"),
+		FFMpegPath:                  envOr("FFMPEG_PATH", "ffmpeg"),
+		Recursive:                   envBoolOr("CLIP_INDEXER_RECURSIVE", true),
+		Host:                        envOr("CLIP_INDEXER_HOST", "127.0.0.1"),
+		Port:                        envIntOr("CLIP_INDEXER_PORT", 4317),
+		AnalysisLanguage:            envOr("CLIP_INDEXER_ANALYSIS_LANGUAGE", "auto"),
+		AutoAnalyze:                 envBoolOr("CLIP_INDEXER_AUTO_ANALYZE", false),
+		AutoAnalyzeMaxItems:         envIntOr("CLIP_INDEXER_AUTO_ANALYZE_MAX_ITEMS", 3),
+		VisionAdaptive:              envBoolOr("CLIP_INDEXER_VISION_ADAPTIVE", true),
+		VisionFrames:                envIntOr("CLIP_INDEXER_VISION_FRAMES", 2),
+		VisionSampleIntervalSeconds: envIntOr("CLIP_INDEXER_VISION_SAMPLE_INTERVAL", 0),
+		VisionMaxItems:              envIntOr("CLIP_INDEXER_VISION_MAX_ITEMS", 12),
+		VisionPromptFile:            envOr("CLIP_INDEXER_VISION_PROMPT_FILE", ""),
+		AudioMaxSeconds:             envIntOr("CLIP_INDEXER_AUDIO_MAX_SECONDS", 45),
+		AudioMaxItems:               envIntOr("CLIP_INDEXER_AUDIO_MAX_ITEMS", 12),
+		AudioModel:                  envOrAny("whisper-1", "LLM_AUDIO_MODEL", "OPENAI_AUDIO_MODEL"),
+		LLMBaseURL:                  envOrAny("https://api.openai.com/v1", "LLM_BASE_URL", "OPENAI_BASE_URL"),
+		LLMAPIKey:                   envOrAny("", "LLM_API_KEY", "OPENAI_API_KEY"),
+		LLMModel:                    envOrAny("", "LLM_MODEL", "OPENAI_MODEL"),
+		LLMTimeoutSeconds:           30,
 	}
 }
 
