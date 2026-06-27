@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "dataset": "mock-filelist-ai-scenes",
+  "description": "Golden fixture set for Clip Atlas video analysis. Each clip is generated from an AI image prompt and rendered as a continuous DJI/gimbal-style single-take MP4, then compared with the indexed analysis output.",
+  "clip_duration_seconds": 10,
+  "clips": [
+    {
+      "file_name": "clip_20260623_091500_mountain_scenic.mp4",
+      "asset": "assets/mountain-scenic.png",
+      "expected_group": "nature",
+      "expected_tags": ["mountain", "scenic", "nature", "outdoor", "valley"],
+      "expected_summary_keywords": ["mountain", "valley", "peaks", "scenic"],
+      "source_prompt": "A realistic DJI drone-style travel clip source frame representing a high-angle scenic view of lush green mountain peaks with a misty valley below under soft morning light. Stable aerial drone travel-footage look, wide 16:9 frame, no text, no logos, no watermark."
+    },
+    {
+      "file_name": "clip_20260623_133045_ramen_dining.mp4",
+      "asset": "assets/ramen-dining.png",
+      "expected_group": "food",
+      "expected_tags": ["food", "dining", "restaurant", "lunch", "indoor"],
+      "expected_summary_keywords": ["ramen", "bowl", "counter", "dining"],
+      "source_prompt": "A realistic gimbal-style travel clip source frame representing cozy restaurant dining: close-up on a steaming hot bowl of ramen noodles on a wooden counter, warm lighting, chopsticks resting on the bowl, kitchen background in soft focus. Stable gimbal travel-footage look, wide 16:9 frame, no text, no logos, no watermark."
+    },
+    {
+      "file_name": "clip_20260624_182000_alley_walk.mp4",
+      "asset": "assets/alley-walk.png",
+      "expected_group": "city",
+      "expected_tags": ["city", "street", "walking", "vertical", "urban", "nightlife"],
+      "expected_summary_keywords": ["alley", "signs", "walking", "lights"],
+      "source_prompt": "A realistic vertical gimbal-style travel clip source frame representing a walk down a narrow city alleyway at dusk: glowing signs, hanging paper lanterns, wet pavement reflections, storefront windows, and people walking in the distance. Stable vertical travel-footage look, vertical 9:16 frame, no readable signs or text, no logos, no watermark."
+    },
+    {
+      "file_name": "clip_20260625_110015_subway_platform.mp4",
+      "asset": "assets/subway-platform.png",
+      "expected_group": "train",
+      "expected_tags": ["train", "platform", "station", "transit", "indoor"],
+      "expected_summary_keywords": ["subway", "platform", "tracks", "station"],
+      "source_prompt": "A realistic DJI-style travel clip source frame representing a modern indoor subway platform: clean concrete floor, yellow safety line, tracks, glass safety doors, and a train approaching in the distance under bright fluorescent lights. Stable travel-footage look, wide 16:9 frame, no readable text or signage, no logos, no watermark."
+    },
+    {
+      "file_name": "clip_20260625_150000_hotel_room.mp4",
+      "asset": "assets/hotel-room.png",
+      "expected_group": "hotel",
+      "expected_tags": ["hotel", "room", "accommodation", "window", "indoor"],
+      "expected_summary_keywords": ["hotel", "room", "bed", "window"],
+      "source_prompt": "A realistic gimbal-style travel clip source frame representing a modern hotel room interior: wide view of a tidy double bed with white linens, a large window letting in natural afternoon light, view of distant city skyline through the window. Stable panning travel-footage look, wide 16:9 frame, no text, no logos, no watermark."
+    }
+  ]
+}
