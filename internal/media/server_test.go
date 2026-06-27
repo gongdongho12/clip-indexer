@@ -280,6 +280,106 @@ func TestHandleOrganizeWritesRootMapAndMovesFiles(t *testing.T) {
 	}
 }
 
+func TestHandleOrganizeUsesDefaultRootWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	sourceDir := filepath.Join(dir, "input")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(sourceDir, "clip.mp4")
+	if err := os.WriteFile(source, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &webServer{
+		report: Report{
+			Items: []Item{{
+				SourcePath:       source,
+				OriginalFileName: filepath.Base(source),
+				Extension:        ".mp4",
+				Tags:             []string{"food", "cafe"},
+				FinalFileName:    "clip.mp4",
+			}},
+		},
+	}
+
+	body, err := json.Marshal(organizeRequest{SourcePaths: []string{source}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/organize", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+
+	server.handleOrganize(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload organizeResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	defaultRoot := filepath.Join(sourceDir, "clip-atlas-organized")
+	target := filepath.Join(defaultRoot, "food", "clip.mp4")
+	if payload.Root != defaultRoot {
+		t.Fatalf("expected default root %q, got %q", defaultRoot, payload.Root)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("expected organized file under default root: %v", err)
+	}
+}
+
+func TestHandleFolderPlanUsesDefaultRootWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	sourceDir := filepath.Join(dir, "input")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(sourceDir, "clip.mp4")
+	if err := os.WriteFile(source, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &webServer{
+		report: Report{
+			Items: []Item{{
+				SourcePath:       source,
+				OriginalFileName: filepath.Base(source),
+				Extension:        ".mp4",
+				Tags:             []string{"food", "cafe"},
+				FinalFileName:    "clip.mp4",
+			}},
+		},
+	}
+
+	body, err := json.Marshal(folderPlanRequest{SourcePaths: []string{source}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/folder-plan", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+
+	server.handleFolderPlan(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected ok, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload folderPlanResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	defaultRoot := filepath.Join(sourceDir, "clip-atlas-organized")
+	if payload.Root != defaultRoot {
+		t.Fatalf("expected default root %q, got %q", defaultRoot, payload.Root)
+	}
+	if len(payload.Assignments) != 1 || payload.Assignments[0].SourcePath != source {
+		t.Fatalf("expected folder assignment for source, got %#v", payload.Assignments)
+	}
+	if info, err := os.Stat(defaultRoot); err != nil || !info.IsDir() {
+		t.Fatalf("expected default root directory to be created, info=%#v err=%v", info, err)
+	}
+}
+
 func TestHandleOrganizeDoesNotAnalyzePendingFiles(t *testing.T) {
 	dir := t.TempDir()
 	sourceDir := filepath.Join(dir, "input")

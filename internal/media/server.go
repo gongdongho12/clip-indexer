@@ -583,12 +583,6 @@ func (s *webServer) handleFolderPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existingFolders, warnings, err := listSubfolders(request.Root, request.Depth)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
 	s.mu.RLock()
 	selected := make([]Item, 0, len(request.SourcePaths))
 	for _, sourcePath := range request.SourcePaths {
@@ -602,6 +596,34 @@ func (s *webServer) handleFolderPlan(w http.ResponseWriter, r *http.Request) {
 	s.mu.RUnlock()
 	if len(selected) == 0 {
 		http.Error(w, "selected files are not part of the current report", http.StatusBadRequest)
+		return
+	}
+	selectedPaths := make([]string, 0, len(selected))
+	for _, item := range selected {
+		selectedPaths = append(selectedPaths, item.SourcePath)
+	}
+
+	root := strings.TrimSpace(request.Root)
+	if root == "" {
+		defaultRoot, err := defaultOrganizationRoot(selectedPaths)
+		if err != nil {
+			http.Error(w, "could not choose destination folder: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		root = defaultRoot
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		http.Error(w, "could not resolve destination folder: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(absRoot, 0o755); err != nil {
+		http.Error(w, "could not create destination folder: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	existingFolders, warnings, err := listSubfolders(absRoot, request.Depth)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -627,7 +649,7 @@ func (s *webServer) handleFolderPlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, folderPlanResponse{
-		Root:            request.Root,
+		Root:            absRoot,
 		UsedLLM:         usedLLM,
 		ExistingFolders: existingFolders,
 		Folders:         plan.Folders,
@@ -649,20 +671,6 @@ func (s *webServer) handleOrganize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	root := strings.TrimSpace(request.Root)
-	if root == "" {
-		http.Error(w, "group destination folder is required", http.StatusBadRequest)
-		return
-	}
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		http.Error(w, "could not resolve destination folder: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := os.MkdirAll(absRoot, 0o755); err != nil {
-		http.Error(w, "could not create destination folder: "+err.Error(), http.StatusBadRequest)
-		return
-	}
 	if len(request.SourcePaths) == 0 {
 		http.Error(w, "select at least one file to organize", http.StatusBadRequest)
 		return
@@ -671,6 +679,24 @@ func (s *webServer) handleOrganize(w http.ResponseWriter, r *http.Request) {
 	sourcePaths := s.organizeSourcePaths(request.SourcePaths)
 	if len(sourcePaths) == 0 {
 		http.Error(w, "no files are available to organize", http.StatusBadRequest)
+		return
+	}
+	root := strings.TrimSpace(request.Root)
+	if root == "" {
+		defaultRoot, err := defaultOrganizationRoot(sourcePaths)
+		if err != nil {
+			http.Error(w, "could not choose destination folder: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		root = defaultRoot
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		http.Error(w, "could not resolve destination folder: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(absRoot, 0o755); err != nil {
+		http.Error(w, "could not create destination folder: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -778,6 +804,43 @@ func (s *webServer) organizeSourcePaths(requested []string) []string {
 		}
 	}
 	return paths
+}
+
+func defaultOrganizationRoot(sourcePaths []string) (string, error) {
+	if len(sourcePaths) == 0 {
+		return "", errors.New("no source paths are available")
+	}
+	dirs := make([]string, 0, len(sourcePaths))
+	for _, sourcePath := range sourcePaths {
+		absPath, err := filepath.Abs(sourcePath)
+		if err != nil {
+			return "", err
+		}
+		dirs = append(dirs, filepath.Dir(absPath))
+	}
+	parent := commonDirectory(dirs)
+	if parent == "" {
+		parent = dirs[0]
+	}
+	return filepath.Join(parent, "clip-atlas-organized"), nil
+}
+
+func commonDirectory(dirs []string) string {
+	if len(dirs) == 0 {
+		return ""
+	}
+	common := filepath.Clean(dirs[0])
+	for _, dir := range dirs[1:] {
+		next := filepath.Clean(dir)
+		for common != next && !strings.HasPrefix(next, common+string(os.PathSeparator)) {
+			parent := filepath.Dir(common)
+			if parent == common {
+				return parent
+			}
+			common = parent
+		}
+	}
+	return common
 }
 
 func (s *webServer) itemsForSourcePaths(sourcePaths []string) []Item {

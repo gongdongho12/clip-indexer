@@ -1478,13 +1478,65 @@
 
     const $ = (id) => document.getElementById(id);
 
+    const defaultGroupFolderName = "clip-atlas-organized";
+
+    function normalizePathSeparators(path) {
+      return String(path || "").replace(/\\/g, "/");
+    }
+
     function baseName(path) {
-      return path.split("/").pop() || path;
+      return normalizePathSeparators(path).split("/").pop() || path;
     }
 
     function dirName(path) {
-      const index = path.lastIndexOf("/");
-      return index === -1 ? "" : path.slice(0, index);
+      const normalized = normalizePathSeparators(path);
+      const index = normalized.lastIndexOf("/");
+      return index === -1 ? "" : normalized.slice(0, index);
+    }
+
+    function joinPath(parent, child) {
+      if (!parent || parent === ".") return child;
+      if (parent === "/") return `/${child}`;
+      return `${parent.replace(/\/+$/, "")}/${child}`;
+    }
+
+    function commonDirectoryForPaths(sourcePaths) {
+      const dirs = sourcePaths.map((sourcePath) => dirName(sourcePath).replace(/\/+$/, "")).filter(Boolean);
+      if (!dirs.length) return "";
+      let common = dirs[0];
+      for (const dir of dirs.slice(1)) {
+        while (common && dir !== common && !dir.startsWith(`${common}/`)) {
+          const index = common.lastIndexOf("/");
+          if (index <= 0) {
+            common = common.startsWith("/") ? "/" : "";
+            break;
+          }
+          common = common.slice(0, index);
+        }
+      }
+      return common || dirs[0];
+    }
+
+    function defaultGroupRootForSourcePaths(sourcePaths) {
+      const parent = commonDirectoryForPaths(sourcePaths);
+      return joinPath(parent, defaultGroupFolderName);
+    }
+
+    function ensureGroupRootForSelection(logDefault = false) {
+      let root = $("groupRoot").value.trim();
+      if (root) return root;
+      const sourcePaths = selectedSourcePaths();
+      if (sourcePaths.length === 0) return "";
+      root = defaultGroupRootForSourcePaths(sourcePaths);
+      $("groupRoot").value = root;
+      state.folderPlan = null;
+      renderFolderPlan();
+      renderRows();
+      renderDetail();
+      if (logDefault) {
+        log(`Using ${root} as organization folder`, "warn");
+      }
+      return root;
     }
 
     function tagsText(tags) {
@@ -2144,8 +2196,8 @@
         log("Select at least one file", "warn");
         return;
       }
-      if ($("moveGroups").checked && !$("groupRoot").value.trim()) {
-        log("Set a group destination folder", "warn");
+      if ($("moveGroups").checked && !ensureGroupRootForSelection(true)) {
+        log("Could not choose a group destination folder", "warn");
         return;
       }
       $("apply").disabled = true;
@@ -2195,9 +2247,9 @@
     }
 
     async function loadFolders() {
-      const root = $("groupRoot").value.trim();
+      const root = $("groupRoot").value.trim() || ensureGroupRootForSelection(true);
       if (!root) {
-        log("Set a group destination folder", "warn");
+        log("Select files or set a group destination folder", "warn");
         return;
       }
       $("loadFolders").disabled = true;
@@ -2222,14 +2274,14 @@
     }
 
     async function fetchFolderPlanForSelection() {
-      const root = $("groupRoot").value.trim();
-      if (!root) {
-        log("Set a group destination folder", "warn");
-        return null;
-      }
       const sourcePaths = selectedSourcePaths();
       if (sourcePaths.length === 0) {
         log("Select at least one file", "warn");
+        return null;
+      }
+      const root = ensureGroupRootForSelection(true);
+      if (!root) {
+        log("Could not choose a group destination folder", "warn");
         return null;
       }
       const response = await fetch("/api/folder-plan", {
@@ -2243,6 +2295,9 @@
     function applyFolderPlan(payload) {
       state.folders = payload.existing_folders || [];
       state.folderPlan = payload;
+      if (payload.root) {
+        $("groupRoot").value = payload.root;
+      }
       $("moveGroups").checked = true;
       renderFolders();
       renderFolderPlan();
@@ -2282,15 +2337,15 @@
     }
 
     async function organizeFolder() {
-      const root = $("groupRoot").value.trim();
-      if (!root) {
-        log("Set a group destination folder", "warn");
-        focusGroupRoot();
-        return;
-      }
       const sourcePaths = selectedSourcePaths();
       if (sourcePaths.length === 0) {
         log("Select files to organize", "warn");
+        return;
+      }
+      const root = ensureGroupRootForSelection(true);
+      if (!root) {
+        log("Could not choose a group destination folder", "warn");
+        focusGroupRoot();
         return;
       }
       const scope = `${sourcePaths.length} selected file(s)`;
@@ -2315,6 +2370,9 @@
         state.edits.clear();
         state.folderPlan = null;
         state.folders = payload.existing_folders || [];
+        if (payload.root) {
+          $("groupRoot").value = payload.root;
+        }
         state.activePath = state.report.items?.[0]?.source_path || "";
         render();
         const applied = (payload.results || []).filter((result) => result.status === "applied").length;
