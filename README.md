@@ -31,26 +31,85 @@ ffmpeg -version
 JSON 리포트 출력:
 
 ```bash
-go run ./cmd/clip-indexer --pretty --trip "Japan 2026" /Volumes/SD_Card/DCIM/DJI_001
+go run ./cmd/clip-indexer --pretty --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MEDIA
 ```
 
 하위 폴더까지 기본으로 스캔합니다:
 
 ```bash
-go run ./cmd/clip-indexer --pretty /Volumes/SD_Card/DCIM/DJI_001
+go run ./cmd/clip-indexer --pretty /Volumes/SD_Card/DCIM/100MEDIA
 ```
 
 로컬 웹 UI 실행:
 
 ```bash
-go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/DJI_001
+go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MEDIA
 ```
+
+### 목업 샘플로 먼저 보기
+
+실제 SD 카드가 없어도 샘플 영상과 분석 캐시를 만들어 작업 흐름을 확인할 수 있습니다. 생성되는 샘플은 AI 생성 이미지를 바탕으로 만든 10초 H.264/AAC `.mp4`이고, 컷을 붙인 슬라이드쇼가 아니라 DJI/짐벌로 찍은 듯한 안정적인 싱글테이크 모션을 넣습니다.
+
+샘플 생성:
+
+```bash
+scripts/create-mock-filelist.sh
+```
+
+JSON 리포트 확인:
+
+```bash
+go run ./cmd/clip-indexer --pretty --trip "Mock Trip" tmp/mock-filelist/DCIM
+```
+
+마인드맵, 파일명/폴더 변경안, 적용 payload까지 dry-run으로 묶어 보기:
+
+```bash
+scripts/review-mock-workflow.sh
+```
+
+직접 실행하려면:
+
+```bash
+go run ./cmd/clip-indexer review \
+  --pretty \
+  --trip "Mock Trip" \
+  --dest-root tmp/mock-filelist/organized \
+  --out-dir tmp/mock-filelist/review \
+  tmp/mock-filelist/DCIM
+```
+
+웹 UI 실행:
+
+```bash
+go run ./cmd/clip-indexer serve --port 0 --trip "Mock Trip" tmp/mock-filelist/DCIM
+```
+
+`--pretty`는 JSON을 들여쓰기해서 터미널에서 읽기 좋게 출력합니다. `review`는 실제 파일을 이동하지 않고 `report.json`, `mindmap.mmd`, `folder-plan.json`, `rename-plan.csv`, `apply-request.json`, `summary.md`를 생성합니다. `serve`는 브라우저에서 작업하는 로컬 웹 UI를 띄웁니다. `--port 0`은 비어 있는 포트를 자동으로 고릅니다. 폴더 플랜/정리 흐름까지 테스트할 때는 `tmp/mock-filelist/organized`를 root로 지정하면 됩니다.
+
+샘플 검증:
+
+```bash
+scripts/verify-mock-filelist.sh
+```
+
+샘플 생성 프롬프트, 기대 태그, 기대 그룹은 `fixtures/mock-filelist/manifest.json`에 저장되어 있습니다. 분석 프롬프트를 바꾼 뒤 별도 report를 비교하려면 `scripts/compare-mock-analysis.py <report.json>`를 실행하면 됩니다.
+
+프롬프트와 캡쳐 간격 튜닝:
+
+```bash
+RUN_LIVE_LLM=1 scripts/tune-vision-analysis.sh
+```
+
+이 명령은 실제 LLM vision 호출을 여러 번 실행하므로 API 비용이 들 수 있습니다. 후보 프롬프트는 `fixtures/mock-filelist/vision-prompts/`에 있고, 기본 비교 간격은 2초, 3초, 5초, 10초입니다. 결과는 `tmp/vision-tuning/results.csv`에 저장됩니다.
+
+외부 모델로 더 좋은 이미지를 만들 때는 `fixtures/mock-filelist/gemini-asset-request.md`를 참고해 `fixtures/mock-filelist/assets/`의 PNG를 교체하면 됩니다. 주제 선정까지 LLM에 맡기려면 `fixtures/mock-filelist/llm-topic-brief.md`를 사용하면 됩니다.
 
 바이너리 빌드:
 
 ```bash
 go build -o clip-indexer ./cmd/clip-indexer
-./clip-indexer serve /Volumes/SD_Card/DCIM/DJI_001
+./clip-indexer serve /Volumes/SD_Card/DCIM/100MEDIA
 ```
 
 버전 확인:
@@ -86,7 +145,9 @@ go run ./cmd/clip-indexer serve ~/Movies/trip
 --llm-vision                 영상 프레임을 샘플링해 장면/위치 힌트 분석
 --llm-audio                  오디오를 추출해 음성/소리 힌트 분석
 --vision-frames              영상당 샘플링할 프레임 수
+--vision-sample-interval     N초마다 vision frame을 샘플링, 0이면 --vision-frames 사용
 --vision-max-items           vision 분석 최대 파일 수, 0이면 전체
+--vision-prompt-file         vision 분석용 system prompt 파일
 --audio-max-seconds          오디오 샘플 길이
 --audio-max-items            audio 분석 최대 파일 수, 0이면 전체
 --llm-base-url               OpenAI 호환 API base URL
@@ -133,7 +194,7 @@ LLM_MODEL=gemini-3.1-flash-lite
 실행:
 
 ```bash
-go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/DJI_001
+go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MEDIA
 ```
 
 터미널에 localhost URL이 출력됩니다. 그 주소를 브라우저에서 열면 됩니다.
@@ -193,7 +254,7 @@ go run ./cmd/clip-indexer serve \
   --auto-analyze \
   --auto-analyze-max-items 3 \
   --trip "Japan 2026" \
-  /Volumes/SD_Card/DCIM/DJI_001
+  /Volumes/SD_Card/DCIM/100MEDIA
 ```
 
 `--auto-analyze-max-items 0`은 pending 파일 전체를 분석합니다. vision/audio 분석은 API 비용이 들 수 있고, 샘플링된 프레임/오디오가 설정한 LLM provider로 전송됩니다.
@@ -262,33 +323,56 @@ flowchart LR
   FolderPlan --> Apply["Apply selected\nrename, move, sidecar, xattr"]
 ```
 
-기본 그룹은 아래처럼 태그와 장면 요약을 기준으로 매칭됩니다. LLM 폴더 플래닝은 이 그룹을 그대로 쓰거나, 기존 하위 폴더 목록과 장면 정보를 보고 더 구체적인 상대 경로를 제안합니다.
+기본 그룹은 아래처럼 태그와 장면 요약 텍스트를 단어 단위로 토큰화한 뒤, 각 키워드의 가중치 점수를 합산하여 가장 높은 점수의 그룹으로 분류합니다. 단순 부분 문자열(substring) 매칭이 아닌 정확한 단어 경계 매칭을 사용하므로, `bustling` 속의 `bus`가 교통 수단으로 잘못 분류되는 문제가 발생하지 않습니다.
 
 ```mermaid
 flowchart TB
-  Tags["통합 tags + scene/audio/location text"] --> Airport["airport\nairport, terminal, flight, 공항, 비행기"]
-  Tags --> Train["train\ntrain, station, subway, 기차, 역, 지하철"]
-  Tags --> Transport["transport\nbus, taxi, car, ferry, 버스, 택시, 운전"]
-  Tags --> Food["food\nrestaurant, cafe, ramen, sushi, 식당, 카페, 음식"]
-  Tags --> Hotel["hotel\nhotel, room, lobby, 숙소, 객실"]
-  Tags --> Landmark["landmark\ntemple, shrine, castle, bridge, 박물관, 전망대"]
-  Tags --> Nature["nature\nbeach, sea, mountain, park, 바다, 산, 풍경"]
-  Tags --> Shopping["shopping\nshop, market, mall, 편의점, 시장"]
-  Tags --> City["city\nstreet, downtown, night_view, 거리, 야경, 산책"]
-  Tags --> People["people\nfamily, friend, portrait, 사람, 가족, 친구"]
-  Tags --> Other["other\n매칭되지 않은 클립"]
+  Input["통합 tags + scene/audio text"] --> Tokenizer["단어 토큰화\n(word boundary split)"]
+  Tokenizer --> WordSet["단어 집합\n{street, walking, urban, ...}"]
+  WordSet --> Scorer["가중치 점수 합산"]
 
-  Airport --> PlannedFolder["계획된 폴더"]
-  Train --> PlannedFolder
-  Transport --> PlannedFolder
-  Food --> PlannedFolder
-  Hotel --> PlannedFolder
-  Landmark --> PlannedFolder
-  Nature --> PlannedFolder
-  Shopping --> PlannedFolder
-  City --> PlannedFolder
-  People --> PlannedFolder
-  Other --> PlannedFolder
+  Scorer --> Airport["airport\n키워드 예: airport(2.0), terminal(2.0), flight(2.0)"]
+  Scorer --> Train["train\n키워드 예: train(2.5), subway(2.5), station(1.5)"]
+  Scorer --> Transport["transport\n키워드 예: bus(2.5), taxi(2.5), driving(2.0)"]
+  Scorer --> Food["food\n키워드 예: ramen(3.0), restaurant(2.5), food(2.0)"]
+  Scorer --> Hotel["hotel\n키워드 예: hotel(2.5), room(1.5), lobby(2.0)"]
+  Scorer --> Landmark["landmark\n키워드 예: temple(2.5), museum(2.5), tower(2.0)"]
+  Scorer --> Nature["nature\n키워드 예: mountain(2.0), beach(2.0), scenic(1.5)"]
+  Scorer --> Shopping["shopping\n키워드 예: shopping(2.5), market(2.0), mall(2.5)"]
+  Scorer --> City["city\n키워드 예: downtown(2.0), night_view(2.0), street(1.5)"]
+  Scorer --> People["people\n키워드 예: family(2.0), friend(2.0), portrait(2.0)"]
+
+  Airport --> Winner["최고 점수 그룹 선택"]
+  Train --> Winner
+  Transport --> Winner
+  Food --> Winner
+  Hotel --> Winner
+  Landmark --> Winner
+  Nature --> Winner
+  Shopping --> Winner
+  City --> Winner
+  People --> Winner
+  Winner --> Result["group.key + reason(score)"]
+```
+
+## 분류 알고리즘 (Score-Weighted Word Matching)
+
+영상 분류는 LLM이 반환한 태그, 장면 요약, 오디오 요약, 위치 추정 텍스트를 모두 합쳐서 단어 단위로 토큰화한 뒤, 10개 그룹 각각의 키워드 가중치 점수를 합산하여 결정합니다.
+
+핵심 개선점:
+
+- **단어 경계 매칭**: `strings.Contains` 대신 텍스트를 공백/특수문자 기준으로 분리하여 정확한 전체 단어만 매칭합니다. `bustling`이 `bus`로 잘못 매칭되거나 `storefronts`가 `store`로 매칭되는 오류가 해결되었습니다.
+- **가중치 점수 합산**: 각 키워드에 1.0~3.0 사이의 가중치가 부여됩니다. 여러 그룹의 키워드가 동시에 매칭될 경우, 총점이 가장 높은 그룹이 선택됩니다.
+- **한국어/영어 이중 지원**: 모든 그룹에 한국어 키워드가 포함되어 있어, 한국어로 된 태그나 장면 요약도 자연스럽게 분류됩니다.
+
+분류 결과의 `reason` 필드에는 매칭된 대표 키워드와 총 점수가 함께 표시됩니다 (예: `train (score: 29.0)`).
+
+### Mock vs Real 분석 비교
+
+`CLIP_INDEXER_SAVE_REAL=1` 환경 변수를 설정하면 기존 mock 캐시를 무시하고 실제 LLM 분석을 실행한 뒤, 결과를 `.clip-analysis.json.real` 파일로 별도 저장합니다. 기존 `.clip-analysis.json`과 비교하여 프롬프트 튜닝에 활용할 수 있습니다.
+
+```bash
+CLIP_INDEXER_SAVE_REAL=1 go run ./cmd/clip-indexer --pretty --llm-vision tmp/mock-filelist/DCIM
 ```
 
 ## 폴더 플래닝과 파일 이동
@@ -321,18 +405,31 @@ LLM 폴더 플래닝:
 
 LLM 플래닝이 실패하거나 credential이 없으면 태그 기반 그룹핑으로 fallback 됩니다.
 
-상단 `Analyze & Organize` 버튼:
+Dry-run 리뷰 번들:
+
+```bash
+go run ./cmd/clip-indexer review \
+  --trip "Japan 2026" \
+  --dest-root /Volumes/TravelDrive/organized \
+  --out-dir tmp/clip-atlas-review/japan-2026 \
+  /Volumes/SD_Card/DCIM/100MEDIA
+```
+
+`review`는 분석 리포트, Mermaid mindmap, 폴더 플랜, rename CSV, 적용 요청 JSON을 한 폴더에 저장합니다. 실제 이동은 하지 않으므로, `summary.md`와 `rename-plan.csv`를 보고 괜찮을 때 웹 UI에서 같은 destination root로 적용하면 됩니다. `--llm-folder-plan`을 추가하면 LLM credential이 있을 때 폴더 구조 설계에도 LLM을 사용하고, 실패하면 deterministic group 폴더로 fallback 됩니다.
+
+상단 `Analyze selected` / `Organize files` 버튼:
 
 1. `Group destination folder`에 이동 대상 루트 폴더를 입력합니다.
-2. 정리할 파일을 선택합니다. 선택된 파일이 없으면 실행하지 않습니다.
-3. 필요한 파일은 먼저 분석하고, 폴더 플랜을 만든 뒤 대상 루트 아래로 이동합니다.
-4. 대상 루트 최상단에 `clip-atlas-map.json`을 저장합니다.
+2. 분석할 파일을 선택한 뒤 `Analyze selected`를 눌러 장면/오디오 분석을 먼저 실행합니다.
+3. 목록의 `Analysis` 컬럼에서 `Queued`, `Analyzing`, `Warning`, `Analyzed` 상태를 확인합니다.
+4. 정리할 파일을 선택한 뒤 `Organize files`를 누르면 폴더 플랜을 만들고 대상 루트 아래로 이동합니다.
+5. 대상 루트 최상단에 `clip-atlas-map.json`을 저장합니다.
 
 이 map JSON에는 분석 결과, 폴더 계획, 원본 경로, 최종 경로, 적용 결과가 같이 들어갑니다. 대상 루트의 기존 하위 폴더는 depth 제한 없이 읽습니다.
 
 작업 아이디어:
 
-- `Analyze & Organize` 실행 전에 dry-run preview를 보여주고, 파일 이동은 별도 확인 단계에서만 실행하기
+- `Organize files` 실행 전에 dry-run preview를 보여주고, 파일 이동은 별도 확인 단계에서만 실행하기
 - map JSON을 다시 불러와 이전 정리 계획과 현재 폴더 상태를 비교하기
 - 모바일에서 긴 파일명/경로를 더 쉽게 훑을 수 있도록 row detail drawer 추가하기
 - folder plan 결과를 태그 맵 화면과 연결해 폴더별 클립 분포를 시각화하기
@@ -389,8 +486,8 @@ Sidecar JSON에 포함되는 값:
 
 ```json
 {
-  "source_path": "/Volumes/SD_Card/DCIM/DJI_001/DJI_20260603184757_0001_D.MP4",
-  "original_file_name": "DJI_20260603184757_0001_D.MP4",
+  "source_path": "/Volumes/SD_Card/DCIM/100MEDIA/CLIP_20260603_184757_ticket_machine.MP4",
+  "original_file_name": "CLIP_20260603_184757_ticket_machine.MP4",
   "extension": ".mp4",
   "shot_at": "2026-06-03T18:47:57+09:00",
   "shot_at_source": "filename_datetime",
@@ -412,8 +509,8 @@ Sidecar JSON에 포함되는 값:
     "folder": "train",
     "reason": "train"
   },
-  "tags": ["video", "dji", "ticket_machine", "train", "japan"],
-  "recommended_file_name": "20260603_184757_dji_001.mp4",
+  "tags": ["video", "ticket_machine", "train", "japan"],
+  "recommended_file_name": "20260603_184757_japan_ticket_machine_001.mp4",
   "final_file_name": "20260603_184757_kansai_ticket_machine_001.mp4"
 }
 ```
@@ -435,7 +532,7 @@ GOCACHE=/private/tmp/clip-indexer-gocache go test ./...
 고정 포트로 웹 UI 실행:
 
 ```bash
-go run ./cmd/clip-indexer serve --port 52993 /Volumes/SD_Card/DCIM/DJI_001
+go run ./cmd/clip-indexer serve --port 52993 /Volumes/SD_Card/DCIM/100MEDIA
 ```
 
 ## 릴리즈
