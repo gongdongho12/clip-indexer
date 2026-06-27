@@ -65,7 +65,7 @@ func runExport(args []string, stdout, stderr io.Writer, envWarnings []string) er
 		return errors.New("at least one file or directory is required")
 	}
 	if options.OutputDir == "" {
-		options.OutputDir = filepath.Join("tmp", "clip-atlas-export", time.Now().Format("20060102-150405"))
+		options.OutputDir = defaultExportOutputDir()
 	}
 
 	report, err := BuildReport(context.Background(), cfg, fs.Args())
@@ -84,6 +84,10 @@ func runExport(args []string, stdout, stderr io.Writer, envWarnings []string) er
 	fmt.Fprintf(stdout, "Report JSON: %s\n", manifest.ReportPath)
 	fmt.Fprintf(stdout, "Files JSON: %s\n", manifest.FilesPath)
 	return nil
+}
+
+func defaultExportOutputDir() string {
+	return filepath.Join("tmp", "clip-atlas-export", time.Now().Format("20060102-150405"))
 }
 
 func writeStaticExport(report Report, options exportOptions) (exportManifest, error) {

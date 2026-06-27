@@ -609,6 +609,55 @@ func TestHandleClearAnalysisClearsSelectedItemsAndCaches(t *testing.T) {
 	}
 }
 
+func TestHandleExportWritesStaticHTML(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "photo.jpg")
+	if err := os.WriteFile(source, []byte("image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outputDir := filepath.Join(dir, "export")
+	server := &webServer{
+		report: Report{
+			Items: []Item{{
+				SourcePath:       source,
+				MediaType:        mediaTypeImage,
+				OriginalFileName: "photo.jpg",
+				Extension:        ".jpg",
+				Tags:             []string{"image", "street"},
+				FinalFileName:    "photo.jpg",
+			}},
+		},
+	}
+
+	requestBody, err := json.Marshal(webExportRequest{OutputDir: outputDir, IncludeMedia: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/export", bytes.NewReader(requestBody))
+	response := httptest.NewRecorder()
+
+	server.handleExport(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected OK, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload webExportResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.HTMLPath == "" || payload.ReportPath == "" || payload.FilesPath == "" || payload.Files != 1 {
+		t.Fatalf("unexpected export response: %#v", payload)
+	}
+	for _, path := range []string{payload.HTMLPath, payload.ReportPath, payload.FilesPath, payload.ManifestPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected export file %s: %v", path, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "media", "0001_photo.jpg")); err != nil {
+		t.Fatalf("expected copied media: %v", err)
+	}
+}
+
 func TestClearItemAnalysisPreservesMetadataLocation(t *testing.T) {
 	item := Item{
 		Extension: ".mp4",

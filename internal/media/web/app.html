@@ -1433,6 +1433,7 @@
           <button id="topAnalyzeSelected" type="button">Analyze selected</button>
           <button class="primary" id="organizeFolder" type="button">Organize files</button>
           <button id="undoOrganize" type="button" title="Undo last organize (Cmd/Ctrl+Z)" disabled>Undo</button>
+          <button id="exportHtml" type="button" title="Export static HTML report">Export HTML</button>
         </div>
         <div class="stats" id="stats"></div>
       </div>
@@ -1552,8 +1553,8 @@
     const $ = (id) => document.getElementById(id);
 
     const defaultGroupFolderName = "clip-atlas-organized";
-    const operationButtonIds = ["topAnalyzeSelected", "organizeFolder", "undoOrganize", "analyze", "analyzeAll", "clearAnalysis", "planFolders", "apply"];
-    const analysisButtonIds = ["topAnalyzeSelected", "organizeFolder", "undoOrganize", "analyze", "analyzeAll", "clearAnalysis"];
+    const operationButtonIds = ["topAnalyzeSelected", "organizeFolder", "undoOrganize", "exportHtml", "analyze", "analyzeAll", "clearAnalysis", "planFolders", "apply"];
+    const analysisButtonIds = ["topAnalyzeSelected", "organizeFolder", "undoOrganize", "exportHtml", "analyze", "analyzeAll", "clearAnalysis"];
 
     function setButtonsDisabled(ids, disabled) {
       for (const id of ids) {
@@ -2655,6 +2656,30 @@
       }
     }
 
+    async function exportHtmlReport() {
+      if (!(state.report?.items || []).length) {
+        log("No files to export", "warn");
+        return;
+      }
+      const includeMedia = window.confirm("Include source media copies for offline preview?\nOK copies media into the export folder. Cancel exports HTML/JSON only.");
+      $("exportHtml").disabled = true;
+      try {
+        log(`Exporting static HTML${includeMedia ? " with media copies" : ""}`, "warn");
+        const response = await fetch("/api/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ include_media: includeMedia })
+        });
+        const payload = await readJSONResponse(response);
+        log(`Exported ${payload.files || 0} file(s) to ${payload.output_dir}`, "ok");
+        log(`Export HTML: ${payload.html_path}`, "ok");
+      } catch (error) {
+        log(error.message, "fail");
+      } finally {
+        $("exportHtml").disabled = false;
+      }
+    }
+
     function focusGroupRoot() {
       const input = $("groupRoot");
       input.classList.add("attention");
@@ -3010,6 +3035,7 @@
     $("topAnalyzeSelected").addEventListener("click", analyzeSelected);
     $("organizeFolder").addEventListener("click", organizeFolder);
     $("undoOrganize").addEventListener("click", undoLastOrganize);
+    $("exportHtml").addEventListener("click", exportHtmlReport);
     $("analyze").addEventListener("click", analyzeSelected);
     $("analyzeAll").addEventListener("click", analyzeAll);
     $("clearAnalysis").addEventListener("click", clearSelectedAnalysis);

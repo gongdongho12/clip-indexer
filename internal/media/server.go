@@ -165,6 +165,7 @@ func (s *webServer) serve(stdout io.Writer) error {
 	mux.HandleFunc("/api/folder-plan", s.handleFolderPlan)
 	mux.HandleFunc("/api/organize", s.handleOrganize)
 	mux.HandleFunc("/api/undo-organize", s.handleUndoOrganize)
+	mux.HandleFunc("/api/export", s.handleExport)
 	mux.HandleFunc("/api/reveal", s.handleReveal)
 	mux.HandleFunc("/api/ping", s.handlePing)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
@@ -295,6 +296,21 @@ type clearAnalysisResponse struct {
 	RemovedCaches int      `json:"removed_caches"`
 	Warnings      []string `json:"warnings,omitempty"`
 	Report        Report   `json:"report"`
+}
+
+type webExportRequest struct {
+	OutputDir    string `json:"output_dir,omitempty"`
+	IncludeMedia bool   `json:"include_media"`
+}
+
+type webExportResponse struct {
+	OutputDir    string `json:"output_dir"`
+	HTMLPath     string `json:"html_path"`
+	ReportPath   string `json:"report_path"`
+	FilesPath    string `json:"files_path"`
+	ManifestPath string `json:"manifest_path"`
+	IncludeMedia bool   `json:"include_media"`
+	Files        int    `json:"files"`
 }
 
 type revealRequest struct {
@@ -545,6 +561,49 @@ func (s *webServer) handleClearAnalysis(w http.ResponseWriter, r *http.Request) 
 		RemovedCaches: removedCaches,
 		Warnings:      warnings,
 		Report:        s.report,
+	})
+}
+
+func (s *webServer) handleExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var request webExportRequest
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	if err := decoder.Decode(&request); err != nil && !errors.Is(err, io.EOF) {
+		http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	outputDir := strings.TrimSpace(request.OutputDir)
+	if outputDir == "" {
+		outputDir = defaultExportOutputDir()
+	}
+
+	s.mu.RLock()
+	report := cloneReport(s.report)
+	s.mu.RUnlock()
+	refreshReportDerived(&report, reportFilesDiscovered(report))
+
+	manifest, err := writeStaticExport(report, exportOptions{
+		OutputDir:    outputDir,
+		IncludeMedia: request.IncludeMedia,
+	})
+	if err != nil {
+		http.Error(w, "export failed: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, webExportResponse{
+		OutputDir:    filepath.Dir(manifest.HTMLPath),
+		HTMLPath:     manifest.HTMLPath,
+		ReportPath:   manifest.ReportPath,
+		FilesPath:    manifest.FilesPath,
+		ManifestPath: filepath.Join(filepath.Dir(manifest.HTMLPath), "manifest.json"),
+		IncludeMedia: request.IncludeMedia,
+		Files:        len(manifest.Files),
 	})
 }
 

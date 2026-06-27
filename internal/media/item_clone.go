@@ -28,3 +28,28 @@ func cloneItem(item Item) Item {
 	}
 	return next
 }
+
+func cloneReport(report Report) Report {
+	next := report
+	next.Items = make([]Item, 0, len(report.Items))
+	for _, item := range report.Items {
+		next.Items = append(next.Items, cloneItem(item))
+	}
+	next.Warnings = append([]string{}, report.Warnings...)
+	next.FolderTree = cloneFolderTree(report.FolderTree)
+	return next
+}
+
+func cloneFolderTree(nodes []FolderTreeNode) []FolderTreeNode {
+	if len(nodes) == 0 {
+		return nil
+	}
+	next := make([]FolderTreeNode, 0, len(nodes))
+	for _, node := range nodes {
+		cloned := node
+		cloned.Files = append([]string{}, node.Files...)
+		cloned.Children = cloneFolderTree(node.Children)
+		next = append(next, cloned)
+	}
+	return next
+}
