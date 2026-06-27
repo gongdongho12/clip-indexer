@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   tag:
-    name: Verify and tag prerelease
+    name: Verify and tag release
     runs-on: ubuntu-latest
 
     steps:
@@ -39,7 +39,7 @@ jobs:
       - name: Test
         run: go test ./...
 
-      - name: Compute prerelease tag
+      - name: Compute release tag
         id: version
         shell: bash
         run: |
@@ -71,9 +71,7 @@ jobs:
             next_version="v${major}.${minor}.${patch}"
           fi
 
-          date_part="$(date -u +%Y%m%d)"
-          short_sha="$(git rev-parse --short=12 HEAD)"
-          tag="${next_version}-auto.${date_part}.${GITHUB_RUN_NUMBER}.${short_sha}"
+          tag="${next_version}"
 
           if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
             echo "::error::Tag ${tag} already exists."
@@ -101,7 +99,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "${TAG}" -m "Automated ${BUMP} prerelease ${TAG} from ${BASE_TAG:-repository history}"
+          git tag -a "${TAG}" -m "Automated ${BUMP} release ${TAG} from ${BASE_TAG:-repository history}"
           git push origin "${TAG}"
 
       - name: Dispatch release workflow
@@ -122,8 +120,8 @@ jobs:
             echo ""
             echo "- Latest release tag: \`${BASE_TAG:-none}\`"
             echo "- Version bump: \`${BUMP}\`"
-            echo "- Next prerelease version: \`${NEXT_VERSION}\`"
-            echo "- Created prerelease tag: \`${TAG}\`"
+            echo "- Next release version: \`${NEXT_VERSION}\`"
+            echo "- Created release tag: \`${TAG}\`"
             echo "- Dispatched the \`Release\` workflow for \`${TAG}\`."
             echo "- Release notes preview was generated before tagging."
           } >> "${GITHUB_STEP_SUMMARY}"

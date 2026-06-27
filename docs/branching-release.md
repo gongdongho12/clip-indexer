@@ -41,19 +41,19 @@ clip-indexer --version
 
 ## Automatic branch release
 
-자동 배포용 prerelease가 필요하면 `release/auto` 브랜치에 push합니다.
+자동 배포 릴리즈가 필요하면 `release/auto` 브랜치에 push합니다.
 
 ```bash
 git push origin HEAD:release/auto
 ```
 
-`Branch Auto Release` workflow는 먼저 formatting, vet, test를 실행합니다. 통과하면 최신 release tag의 `vX.Y.Z` 버전을 읽고 patch를 1 올려 아래 형식의 새 prerelease tag를 만듭니다.
+`Branch Auto Release` workflow는 먼저 formatting, vet, test를 실행합니다. 통과하면 최신 release tag의 `vX.Y.Z` 버전을 읽고 patch를 1 올려 아래 형식의 새 stable tag를 만듭니다.
 
 ```text
-vX.Y.Z-auto.YYYYMMDD.RUN.SHORTSHA
+vX.Y.Z
 ```
 
-예를 들어 최신 release tag가 `v0.1.1-auto.20260625.42.1a2b3c4d5e6f`이면 다음 자동 tag는 `v0.1.2-auto.YYYYMMDD.RUN.SHORTSHA`처럼 생성됩니다. workflow가 tag를 만든 뒤 같은 tag로 `Release` workflow를 dispatch하고, GitHub Release에는 prerelease로 표시됩니다.
+예를 들어 최신 release tag가 `v0.1.1`이면 다음 자동 tag는 `v0.1.2`처럼 생성됩니다. workflow가 tag를 만든 뒤 같은 tag로 `Release` workflow를 dispatch하고, GitHub Release에는 일반 release로 표시됩니다.
 
 자동 릴리즈 브랜치를 바꾸고 싶으면 `.github/workflows/branch-release.yml`의 `on.push.branches` 값을 수정합니다.
 
@@ -75,15 +75,15 @@ ci: publish checksum file with release assets
 4. `Release` workflow가 Linux, macOS, Windows용 archive를 빌드합니다.
 5. GitHub Release에 archive, release notes, `SHA256SUMS.txt`가 업로드됩니다.
 
-## Prerelease smoke release
+## Automated release
 
-현재 작업물을 prerelease로 한 번 배포해보려면 `main` 또는 현재 검증된 브랜치에서 아래처럼 자동 릴리즈 브랜치로 push합니다.
+현재 작업물을 새 patch release로 배포하려면 `main` 또는 현재 검증된 브랜치에서 아래처럼 자동 릴리즈 브랜치로 push합니다.
 
 ```bash
 git push origin HEAD:release/auto
 ```
 
-이 push는 `Branch Auto Release` workflow를 실행합니다. workflow는 gofmt, vet, test를 통과한 뒤 릴리즈 노트 preview를 생성하고, 최신 release tag 기준 다음 patch 버전의 `vX.Y.Z-auto.YYYYMMDD.RUN.SHORTSHA` tag를 push합니다. 그 다음 같은 tag로 `Release` workflow를 dispatch해 platform별 archive, checksums, GitHub prerelease notes를 발행합니다.
+이 push는 `Branch Auto Release` workflow를 실행합니다. workflow는 gofmt, vet, test를 통과한 뒤 릴리즈 노트 preview를 생성하고, 최신 release tag 기준 다음 patch 버전의 `vX.Y.Z` tag를 push합니다. 그 다음 같은 tag로 `Release` workflow를 dispatch해 platform별 archive, checksums, GitHub release notes를 발행합니다.
 
 ## Hotfixes
 
