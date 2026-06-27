@@ -4,6 +4,17 @@ All notable changes to **Clip Atlas** are documented in this file.
 
 ## 2026-06-27
 
+Built from `724871b61eb7`. **2** commit(s) processed.
+Changes since `v0.1.3`.
+
+### Features
+- choose default organize folder (`724871b61e`)
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`ef6f4d8f6d`)
+
+## 2026-06-27
+
 Built from `49696f78b2f8`. **2** commit(s) processed.
 Changes since `v0.1.2`.
 
