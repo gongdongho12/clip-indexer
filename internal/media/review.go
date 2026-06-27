@@ -321,6 +321,9 @@ func reviewItemsAndApplyRequest(items []Item, assignments []folderAssignment, de
 			Reason:           assignment.Reason,
 		})
 
+		if conflictReason != "" {
+			continue
+		}
 		request.Operations = append(request.Operations, applyOperation{
 			SourcePath:   item.SourcePath,
 			FinalName:    assignment.FinalFileName,

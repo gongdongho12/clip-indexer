@@ -112,6 +112,18 @@ def render(current_tag: str, previous_tag: str, subjects: list[str]) -> str:
 
     lines.extend(
         [
+            "### Install",
+            "1. Download the archive for your platform from the release assets.",
+            "2. Download `SHA256SUMS.txt` and verify the archive checksum.",
+            "3. Extract the archive and place `clip-indexer` on your `PATH`.",
+            "4. Check the installed binary with `clip-indexer --version`.",
+            "",
+            "### Quick Start",
+            "- Index footage as JSON: `clip-indexer --pretty --trip \"Japan 2026\" /path/to/DCIM`.",
+            "- Launch the local web UI: `clip-indexer serve --trip \"Japan 2026\" /path/to/DCIM`.",
+            "- Use the auto-restarting dev server while editing: `clip-indexer dev --trip \"Japan 2026\" /path/to/DCIM`.",
+            "- Generate a dry-run review bundle: `clip-indexer review --dest-root /path/to/organized /path/to/DCIM`.",
+            "",
             "### Assets",
             "- Download the archive for your platform.",
             "- Verify the archive with `SHA256SUMS.txt`.",

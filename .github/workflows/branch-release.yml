@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: branch-auto-release-${{ github.ref }}
@@ -81,6 +82,12 @@ jobs:
           git tag -a "${TAG}" -m "Automated prerelease ${TAG} from ${BASE_TAG}"
           git push origin "${TAG}"
 
+      - name: Dispatch release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh workflow run release.yml --ref "${TAG}" -f tag="${TAG}"
+
       - name: Summarize release handoff
         env:
           TAG: ${{ steps.version.outputs.tag }}
@@ -91,6 +98,6 @@ jobs:
             echo ""
             echo "- Base version: \`${BASE_TAG}\`"
             echo "- Created prerelease tag: \`${TAG}\`"
-            echo "- The tag push starts the \`Release\` workflow."
+            echo "- Dispatched the \`Release\` workflow for \`${TAG}\`."
             echo "- Release notes preview was generated before tagging."
           } >> "${GITHUB_STEP_SUMMARY}"

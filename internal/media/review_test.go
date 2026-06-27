@@ -64,10 +64,7 @@ func TestReviewItemsAndApplyRequestDetectsDuplicateTargets(t *testing.T) {
 			t.Fatalf("expected duplicate target conflict, got %#v", plan)
 		}
 	}
-	if len(request.Operations) != 2 {
-		t.Fatalf("expected two apply operations, got %d", len(request.Operations))
-	}
-	if request.Operations[0].GroupRoot != destination || !request.Operations[0].WriteSidecar {
-		t.Fatalf("unexpected apply operation: %#v", request.Operations[0])
+	if len(request.Operations) != 0 {
+		t.Fatalf("expected conflicting targets to be omitted from apply request, got %d", len(request.Operations))
 	}
 }
