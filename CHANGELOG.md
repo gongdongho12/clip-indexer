@@ -4,6 +4,17 @@ All notable changes to **Clip Atlas** are documented in this file.
 
 ## 2026-06-27
 
+Built from `cb5dafb999d6`. **2** commit(s) processed.
+Changes since `v0.1.0`.
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`c097b1f907`)
+
+### Build and CI
+- increment auto release versions (`cb5dafb999`)
+
+## 2026-06-27
+
 Built from `479d28ecc908`. **2** commit(s) processed.
 Changes since `v0.1.0`.
 
