@@ -4,6 +4,17 @@ All notable changes to **Clip Atlas** are documented in this file.
 
 ## 2026-06-27
 
+Built from `992c2739d2c4`. **2** commit(s) processed.
+Changes since `v0.1.5`.
+
+### Features
+- export static reports from web UI (`992c2739d2`)
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`0e89b157da`)
+
+## 2026-06-27
+
 Built from `e37bc4bffba7`. **2** commit(s) processed.
 Changes since `v0.1.5`.
 
