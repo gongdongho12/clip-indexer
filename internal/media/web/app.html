@@ -2085,8 +2085,7 @@
     }
 
     async function applySelected() {
-      const operations = selectedOperations();
-      if (operations.length === 0) {
+      if (selectedSourcePaths().length === 0) {
         log("Select at least one file", "warn");
         return;
       }
@@ -2096,6 +2095,10 @@
       }
       $("apply").disabled = true;
       try {
+        if ($("moveGroups").checked) {
+          await ensureFolderPlanForSelection();
+        }
+        const operations = selectedOperations();
         const response = await fetch("/api/apply", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2163,32 +2166,55 @@
       }
     }
 
-    async function planFolders() {
+    async function fetchFolderPlanForSelection() {
       const root = $("groupRoot").value.trim();
       if (!root) {
         log("Set a group destination folder", "warn");
-        return;
+        return null;
       }
       const sourcePaths = selectedSourcePaths();
       if (sourcePaths.length === 0) {
         log("Select at least one file", "warn");
-        return;
+        return null;
       }
+      const response = await fetch("/api/folder-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ root, source_paths: sourcePaths })
+      });
+      return readJSONResponse(response);
+    }
+
+    function applyFolderPlan(payload) {
+      state.folders = payload.existing_folders || [];
+      state.folderPlan = payload;
+      $("moveGroups").checked = true;
+      renderFolders();
+      renderFolderPlan();
+      renderRows();
+      renderDetail();
+    }
+
+    async function ensureFolderPlanForSelection() {
+      const sourcePaths = selectedSourcePaths();
+      const plannedPaths = new Set((state.folderPlan?.assignments || []).map((assignment) => assignment.source_path));
+      const missingPlan = sourcePaths.some((sourcePath) => !plannedPaths.has(sourcePath));
+      if (!missingPlan) return;
+      log(`Auto-mapping ${sourcePaths.length} file(s) into tag folders`, "warn");
+      const payload = await fetchFolderPlanForSelection();
+      if (!payload) {
+        throw new Error("Could not plan folders for selected files");
+      }
+      applyFolderPlan(payload);
+      log(`Mapped ${payload.assignments?.length || 0} file(s) into ${payload.folders?.length || 0} folder(s)`, payload.used_llm ? "ok" : "warn");
+    }
+
+    async function planFolders() {
       $("planFolders").disabled = true;
       try {
-        const response = await fetch("/api/folder-plan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ root, source_paths: sourcePaths })
-        });
-        const payload = await readJSONResponse(response);
-        state.folders = payload.existing_folders || [];
-        state.folderPlan = payload;
-        $("moveGroups").checked = true;
-        renderFolders();
-        renderFolderPlan();
-        renderRows();
-        renderDetail();
+        const payload = await fetchFolderPlanForSelection();
+        if (!payload) return;
+        applyFolderPlan(payload);
         log(`Planned ${payload.assignments?.length || 0} file(s) into ${payload.folders?.length || 0} folder(s)`, payload.used_llm ? "ok" : "warn");
         if (payload.warnings?.length) {
           log(payload.warnings[0], "warn");
