@@ -24,6 +24,7 @@ func BuildItem(path string, sequence int, trip string, probe ProbeResult) Item {
 	ext := strings.ToLower(filepath.Ext(path))
 	item := Item{
 		SourcePath:       path,
+		MediaType:        mediaTypeForPath(path, probe),
 		OriginalFileName: originalName,
 		Extension:        ext,
 		FormatName:       probe.FormatName,
@@ -78,7 +79,8 @@ func BuildTags(fileName string, shotAt time.Time, probe ProbeResult) []string {
 		tags = append(tags, tag)
 	}
 
-	add("video")
+	mediaType := mediaTypeForPath(fileName, probe)
+	add(mediaType)
 	if strings.HasPrefix(strings.ToLower(fileName), "dji") || containsTagValue(probe.Tags, "dji") {
 		add("dji")
 	}
@@ -101,7 +103,7 @@ func BuildTags(fileName string, shotAt time.Time, probe ProbeResult) []string {
 	}
 	if probe.Audio != nil {
 		add("audio")
-	} else {
+	} else if mediaType == mediaTypeVideo {
 		add("silent")
 	}
 	if probe.Location != nil {

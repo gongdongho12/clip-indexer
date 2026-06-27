@@ -133,7 +133,7 @@ func planFoldersWithLLM(ctx context.Context, cfg Config, items []Item, existingF
 			{
 				"role": "system",
 				"content": strings.Join([]string{
-					"You plan a folder structure for travel video clips.",
+					"You plan a folder structure for travel media files.",
 					"Use tags, scene summaries, audio clues, location hints, shot dates, and the provided deterministic group.",
 					"Prefer existing folders only when the full relative path semantically fits the item. Do not nest unrelated clips under an existing folder just because it exists.",
 					"When a new folder is needed, prefer a concise root-level sibling folder unless a nested existing folder is clearly the right parent.",

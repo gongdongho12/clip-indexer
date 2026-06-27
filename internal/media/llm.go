@@ -75,7 +75,7 @@ func EnrichWithLLM(ctx context.Context, cfg Config, items []Item) []string {
 		"messages": []map[string]string{
 			{
 				"role":    "system",
-				"content": "You rename and organize travel video clips from metadata. Return only JSON with an items array. For each input item, keep source_path exact, add concise tags, optionally provide suggested_slug, final_file_name, scene_summary, location_guess, location_confidence, location_label, and notes. File names must be filesystem-safe, lowercase where applicable, preserve meaningful Korean/Japanese/Chinese words, and keep the original extension. Use location guesses only when metadata already supports them; do not invent places from metadata alone. " + analysisLanguageInstruction(cfg),
+				"content": "You rename and organize travel media files from metadata. Return only JSON with an items array. For each input item, keep source_path exact, add concise tags, optionally provide suggested_slug, final_file_name, scene_summary, location_guess, location_confidence, location_label, and notes. File names must be filesystem-safe, lowercase where applicable, preserve meaningful Korean/Japanese/Chinese words, and keep the original extension. Use location guesses only when metadata already supports them; do not invent places from metadata alone. " + analysisLanguageInstruction(cfg),
 			},
 			{
 				"role":    "user",

@@ -1,12 +1,12 @@
 # Clip Atlas
 
-`clip-indexer`는 여행 영상 파일을 읽고, 촬영일/메타데이터/태그/추천 파일명을 JSON으로 정리해주는 Go CLI이자 로컬 웹 파일 매니저입니다. 웹 UI에서는 LLM 장면 분석, 전체 선택, 폴더 플래닝, 파일 이동, 태그 sidecar 저장까지 처리할 수 있습니다.
+`clip-indexer`는 여행 영상, 사진, 오디오 파일을 읽고, 촬영일/메타데이터/태그/추천 파일명을 JSON으로 정리해주는 Go CLI이자 로컬 웹 파일 매니저입니다. 웹 UI에서는 LLM 장면/음성 분석, 전체 선택, 폴더 플래닝, 파일 이동, 태그 sidecar 저장까지 처리할 수 있습니다.
 
 전체 흐름은 이렇게 잡으면 됩니다.
 
-1. SD 카드나 영상 폴더를 CLI에 넘깁니다.
+1. SD 카드나 미디어 폴더를 CLI에 넘깁니다.
 2. JSON 리포트를 확인하거나 로컬 웹 UI를 엽니다.
-3. 필요한 영상만 LLM으로 장면/위치/음성 힌트를 분석합니다.
+3. 필요한 파일만 LLM으로 장면/위치/음성 힌트를 분석합니다.
 4. 일부 파일 또는 전체 파일을 선택합니다.
 5. 태그와 LLM 결과를 바탕으로 폴더 구조를 계획합니다.
 6. 최종 파일명, 태그 JSON, macOS 메타데이터, 파일 이동을 적용합니다.
@@ -120,7 +120,7 @@ go build -o clip-indexer ./cmd/clip-indexer
 
 ## 명령어
 
-`index`는 기본 명령어입니다. 영상 목록을 분석하고 JSON을 stdout으로 출력합니다.
+`index`는 기본 명령어입니다. 미디어 목록을 분석하고 JSON을 stdout으로 출력합니다.
 
 ```bash
 go run ./cmd/clip-indexer index --pretty ~/Movies/trip
@@ -133,6 +133,24 @@ go run ./cmd/clip-indexer --pretty ~/Movies/trip
 go run ./cmd/clip-indexer serve ~/Movies/trip
 ```
 
+`export`는 서버 없이 열 수 있는 정적 HTML 리포트를 만듭니다. 폴더 목록, 파일 목록, 태그 맵, 선택 파일 상세를 `index.html`에서 확인할 수 있습니다.
+
+```bash
+go run ./cmd/clip-indexer export \
+  --trip "Japan 2026" \
+  --out-dir tmp/clip-atlas-export/japan-2026 \
+  ~/Movies/trip
+```
+
+기본 export는 원본 경로와 분석 결과만 저장합니다. `--include-media`를 추가하면 export 폴더의 `media/` 아래로 원본 미디어를 복사해서 HTML에서 미리보기를 바로 열 수 있습니다.
+
+생성 파일:
+
+- `index.html`: 서버 없이 여는 정적 뷰어
+- `report.json`: 전체 분석 리포트
+- `files.json`: export 파일 목록
+- `manifest.json`: export 생성 정보
+
 주요 옵션:
 
 ```text
@@ -141,10 +159,11 @@ go run ./cmd/clip-indexer serve ~/Movies/trip
 --trip                       추천 파일명에 포함할 여행/프로젝트 이름
 --ffprobe                    ffprobe 실행 파일 경로
 --ffmpeg                     ffmpeg 실행 파일 경로
+--analysis-language          분석 결과 언어: auto, ko, en, zh, ja
 --llm                        메타데이터 기반 LLM 보강
---llm-vision                 영상 프레임을 샘플링해 장면/위치 힌트 분석
+--llm-vision                 영상/이미지를 샘플링해 장면/위치 힌트 분석
 --llm-audio                  오디오를 추출해 음성/소리 힌트 분석
---vision-frames              영상당 샘플링할 프레임 수
+--vision-frames              시각 미디어 파일당 샘플링할 프레임 수
 --vision-sample-interval     N초마다 vision frame을 샘플링, 0이면 --vision-frames 사용
 --vision-max-items           vision 분석 최대 파일 수, 0이면 전체
 --vision-prompt-file         vision 분석용 system prompt 파일
@@ -234,6 +253,11 @@ go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MED
 - `All files`: 필터가 걸려 있어도 indexed 된 전체 파일을 선택합니다.
 - `Clear`: 현재 선택을 모두 해제합니다.
 
+단축키:
+
+- `Cmd/Ctrl+A`: indexed 된 전체 파일 선택과 선택 해제를 토글합니다.
+- `Cmd/Ctrl+Z`: 마지막 `Organize files` 작업을 undo 합니다.
+
 ## LLM 분석
 
 선택 파일 분석:
@@ -263,7 +287,7 @@ go run ./cmd/clip-indexer serve \
 
 ## 분석 캐시
 
-LLM 분석이 성공하면 영상 옆에 캐시가 저장됩니다.
+LLM 분석이 성공하면 원본 미디어 옆에 캐시가 저장됩니다.
 
 ```text
 video.mp4.clip-analysis.json
@@ -275,7 +299,7 @@ video.mp4.clip-analysis.json
 
 - 원본 파일명
 - 촬영 날짜
-- 영상 길이
+- 미디어 길이
 
 생성 파일은 git ignore에 포함되어 있습니다.
 
@@ -290,9 +314,9 @@ video.mp4.clip-analysis.json
 
 ```mermaid
 flowchart LR
-  Video["영상 파일"] --> Probe["ffprobe 메타데이터"]
-  Video --> Frames["ffmpeg 프레임 샘플"]
-  Video --> Sound["ffmpeg 오디오 샘플"]
+  Media["미디어 파일"] --> Probe["ffprobe 메타데이터"]
+  Media --> Frames["ffmpeg 프레임 샘플"]
+  Media --> Sound["ffmpeg 오디오 샘플"]
 
   Probe --> BaseTags["기본 태그\nvideo, dji, 4k, landscape, 60fps, morning"]
   Probe --> ShotDate["촬영일\nfilename, metadata, filesystem"]
@@ -357,13 +381,13 @@ flowchart TB
 
 ## 분류 알고리즘 (Score-Weighted Word Matching)
 
-영상 분류는 LLM이 반환한 태그, 장면 요약, 오디오 요약, 위치 추정 텍스트를 모두 합쳐서 단어 단위로 토큰화한 뒤, 10개 그룹 각각의 키워드 가중치 점수를 합산하여 결정합니다.
+미디어 분류는 LLM이 반환한 태그, 장면 요약, 오디오 요약, 위치 추정 텍스트를 모두 합쳐서 단어 단위로 토큰화한 뒤, 10개 그룹 각각의 키워드 가중치 점수를 합산하여 결정합니다.
 
 핵심 개선점:
 
 - **단어 경계 매칭**: `strings.Contains` 대신 텍스트를 공백/특수문자 기준으로 분리하여 정확한 전체 단어만 매칭합니다. `bustling`이 `bus`로 잘못 매칭되거나 `storefronts`가 `store`로 매칭되는 오류가 해결되었습니다.
 - **가중치 점수 합산**: 각 키워드에 1.0~3.0 사이의 가중치가 부여됩니다. 여러 그룹의 키워드가 동시에 매칭될 경우, 총점이 가장 높은 그룹이 선택됩니다.
-- **한국어/영어 이중 지원**: 모든 그룹에 한국어 키워드가 포함되어 있어, 한국어로 된 태그나 장면 요약도 자연스럽게 분류됩니다.
+- **다국어 분석 지원**: `--analysis-language` 또는 웹 UI 언어 선택으로 auto, 한국어, 영어, 중국어, 일본어 분석 결과를 선택할 수 있습니다.
 
 분류 결과의 `reason` 필드에는 매칭된 대표 키워드와 총 점수가 함께 표시됩니다 (예: `train (score: 29.0)`).
 
@@ -383,7 +407,7 @@ Clip Atlas에는 두 가지 정리 방식이 있습니다.
 
 - 각 파일은 deterministic `group` 값을 가집니다.
 - 기본 그룹은 airport, train, transport, food, hotel, landmark, nature, shopping, city, people, other 입니다.
-- 영어 태그와 한국어 태그를 모두 참고합니다.
+- 한국어, 영어, 중국어, 일본어 태그를 참고합니다.
 
 LLM 폴더 플래닝:
 
@@ -424,6 +448,7 @@ go run ./cmd/clip-indexer review \
 3. 목록의 `Analysis` 컬럼에서 `Queued`, `Analyzing`, `Warning`, `Analyzed` 상태를 확인합니다.
 4. 정리할 파일을 선택한 뒤 `Organize files`를 누르면 폴더 플랜을 만들고 대상 루트 아래로 이동합니다.
 5. 대상 루트 최상단에 `clip-atlas-map.json`을 저장합니다.
+6. 직전 정리 작업은 `Undo organize` 버튼 또는 `Cmd/Ctrl+Z`로 되돌릴 수 있습니다.
 
 이 map JSON에는 분석 결과, 폴더 계획, 원본 경로, 최종 경로, 적용 결과가 같이 들어갑니다. 대상 루트의 기존 하위 폴더는 depth 제한 없이 읽습니다.
 
@@ -442,6 +467,7 @@ Apply 동작:
 - target path를 먼저 검사합니다.
 - 기존 파일은 덮어쓰지 않습니다.
 - 분석 캐시와 태그 sidecar가 있으면 영상과 같이 이동합니다.
+- `Organize files`는 `Group destination folder`가 비어 있으면 선택 파일의 공통 부모 아래 `clip-atlas-organized`를 자동으로 제안합니다.
 
 예시:
 
@@ -471,12 +497,12 @@ Sidecar JSON에 포함되는 값:
 - 위치 정보
 - 장면/오디오 요약
 - 그룹
-- 영상 길이와 포맷
+- 미디어 길이와 포맷
 
 ## 안전 장치
 
 - 기존 파일을 덮어쓰지 않습니다.
-- 파일 이동에는 destination root 입력이 필요합니다.
+- 파일 이동에는 destination root가 필요하며, 비어 있으면 선택 파일 기준 기본 폴더를 자동으로 채웁니다.
 - 계획된 폴더는 destination root 아래의 상대 경로만 허용합니다.
 - 분석만으로는 파일을 rename/move 하지 않습니다.
 - 실제 파일 변경은 `Apply selected`를 눌렀을 때만 일어납니다.

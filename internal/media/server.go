@@ -24,16 +24,17 @@ import (
 var webFiles embed.FS
 
 type webServer struct {
-	cfg            Config
-	report         Report
-	mu             sync.RWMutex
-	shutdown       chan struct{}
-	shutdownOnce   sync.Once
-	clientMu       sync.Mutex
-	lastClient     time.Time
-	analysisMu     sync.RWMutex
-	analysisStatus analysisStatus
-	progress       io.Writer
+	cfg              Config
+	report           Report
+	lastOrganizeUndo *organizeUndo
+	mu               sync.RWMutex
+	shutdown         chan struct{}
+	shutdownOnce     sync.Once
+	clientMu         sync.Mutex
+	lastClient       time.Time
+	analysisMu       sync.RWMutex
+	analysisStatus   analysisStatus
+	progress         io.Writer
 }
 
 type analysisStatus struct {
@@ -115,7 +116,7 @@ func runServe(args []string, stdout, stderr io.Writer, envWarnings []string) err
 	fs.BoolVar(&cfg.AutoAnalyze, "auto-analyze", cfg.AutoAnalyze, "automatically analyze files with missing content after the web UI starts")
 	fs.IntVar(&cfg.AutoAnalyzeMaxItems, "auto-analyze-max-items", cfg.AutoAnalyzeMaxItems, "maximum files to auto analyze on server start; 0 means all")
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: %s serve [flags] <video-file-or-directory>...\n\n", cliName)
+		fmt.Fprintf(stderr, "Usage: %s serve [flags] <media-file-or-directory>...\n\n", cliName)
 		fmt.Fprintln(stderr, "Launches a local file-manager web UI for reviewing names and tags.")
 		fmt.Fprintln(stderr, "\nFlags:")
 		fs.PrintDefaults()
@@ -139,7 +140,7 @@ func runServe(args []string, stdout, stderr io.Writer, envWarnings []string) err
 		return err
 	}
 	report.Warnings = append(envWarnings, report.Warnings...)
-	report.Summary = summarize(report.Items, report.Summary.FilesDiscovered, len(report.Warnings))
+	refreshReportDerived(&report, reportFilesDiscovered(report))
 
 	app := &webServer{
 		cfg:            cfg,
@@ -163,6 +164,7 @@ func (s *webServer) serve(stdout io.Writer) error {
 	mux.HandleFunc("/api/folders", s.handleFolders)
 	mux.HandleFunc("/api/folder-plan", s.handleFolderPlan)
 	mux.HandleFunc("/api/organize", s.handleOrganize)
+	mux.HandleFunc("/api/undo-organize", s.handleUndoOrganize)
 	mux.HandleFunc("/api/reveal", s.handleReveal)
 	mux.HandleFunc("/api/ping", s.handlePing)
 	mux.HandleFunc("/api/shutdown", s.handleShutdown)
@@ -235,6 +237,7 @@ func (s *webServer) handleReport(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	report := s.report
 	s.mu.RUnlock()
+	refreshReportDerived(&report, reportFilesDiscovered(report))
 	writeJSON(w, report)
 }
 
@@ -264,7 +267,8 @@ func (s *webServer) handleApply(w http.ResponseWriter, r *http.Request) {
 		result := s.applyOne(operation)
 		response.Results = append(response.Results, result)
 	}
-	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	s.lastOrganizeUndo = nil
+	refreshReportDerived(&s.report, reportFilesDiscovered(s.report))
 	response.Report = s.report
 	writeJSON(w, response)
 }
@@ -341,6 +345,7 @@ type organizeResponse struct {
 	Results         []applyResult      `json:"results"`
 	Warnings        []string           `json:"warnings,omitempty"`
 	Report          Report             `json:"report"`
+	Undo            undoState          `json:"undo"`
 }
 
 type organizationMap struct {
@@ -384,7 +389,9 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	cfg := s.cfg
 	cfg.UseLLM = true
 	cfg.UseLLMVision = true
-	if !supportsAudioTranscriptions(cfg.LLMBaseURL) {
+	if supportsAudioTranscriptions(cfg.LLMBaseURL) {
+		cfg.UseLLMAudio = true
+	} else {
 		cfg.UseLLMAudio = false
 	}
 
@@ -531,7 +538,8 @@ func (s *webServer) handleClearAnalysis(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	s.report.Warnings = append(s.report.Warnings, warnings...)
-	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	s.lastOrganizeUndo = nil
+	refreshReportDerived(&s.report, reportFilesDiscovered(s.report))
 	writeJSON(w, clearAnalysisResponse{
 		Cleared:       cleared,
 		RemovedCaches: removedCaches,
@@ -764,8 +772,9 @@ func (s *webServer) handleOrganize(w http.ResponseWriter, r *http.Request) {
 			existingWarnings[warning] = true
 		}
 	}
-	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	refreshReportDerived(&s.report, reportFilesDiscovered(s.report))
 	report := s.report
+	undo := undoStateFor(s.lastOrganizeUndo)
 	s.mu.Unlock()
 
 	writeJSON(w, organizeResponse{
@@ -780,6 +789,7 @@ func (s *webServer) handleOrganize(w http.ResponseWriter, r *http.Request) {
 		Results:         results,
 		Warnings:        warnings,
 		Report:          report,
+		Undo:            undo,
 	})
 }
 
@@ -870,7 +880,7 @@ func (s *webServer) analyzeForOrganization(ctx context.Context, sourcePaths []st
 		if !wanted[item.SourcePath] || item.Content != nil {
 			continue
 		}
-		if item.Video == nil && item.Audio == nil {
+		if !itemSupportsAnalysis(item) {
 			continue
 		}
 		pending = append(pending, item.SourcePath)
@@ -883,7 +893,9 @@ func (s *webServer) analyzeForOrganization(ctx context.Context, sourcePaths []st
 	cfg := s.cfg
 	cfg.UseLLM = true
 	cfg.UseLLMVision = true
-	if !supportsAudioTranscriptions(cfg.LLMBaseURL) {
+	if supportsAudioTranscriptions(cfg.LLMBaseURL) {
+		cfg.UseLLMAudio = true
+	} else {
 		cfg.UseLLMAudio = false
 	}
 	cfg.VisionMaxItems = 1
@@ -911,14 +923,21 @@ func (s *webServer) applyOrganizationPlan(root string, assignments []folderAssig
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	results := make([]applyResult, 0, len(assignments))
+	undo := &organizeUndo{
+		CreatedAt: time.Now().Format(time.RFC3339),
+	}
 	for _, assignment := range assignments {
 		tags := []string{}
+		var before Item
+		found := false
 		if index := slices.IndexFunc(s.report.Items, func(item Item) bool {
 			return item.SourcePath == assignment.SourcePath
 		}); index >= 0 {
 			tags = append(tags, s.report.Items[index].Tags...)
+			before = cloneItem(s.report.Items[index])
+			found = true
 		}
-		results = append(results, s.applyOne(applyOperation{
+		result := s.applyOne(applyOperation{
 			SourcePath:   assignment.SourcePath,
 			FinalName:    assignment.FinalFileName,
 			Tags:         tags,
@@ -926,9 +945,21 @@ func (s *webServer) applyOrganizationPlan(root string, assignments []folderAssig
 			MoveToGroup:  true,
 			GroupRoot:    root,
 			TargetFolder: assignment.Folder,
-		}))
+		})
+		results = append(results, result)
+		if found && result.Status == "applied" && result.TargetPath != "" && result.TargetPath != before.SourcePath && (result.Moved || result.Renamed) {
+			undo.Items = append(undo.Items, organizeUndoItem{
+				Before:    before,
+				AfterPath: result.TargetPath,
+			})
+		}
 	}
-	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	refreshReportDerived(&s.report, reportFilesDiscovered(s.report))
+	if len(undo.Items) == 0 {
+		s.lastOrganizeUndo = nil
+	} else {
+		s.lastOrganizeUndo = undo
+	}
 	return results
 }
 
@@ -1035,6 +1066,11 @@ func (s *webServer) runAutoAnalyze(ctx context.Context) {
 	cfg := s.cfg
 	cfg.UseLLM = true
 	cfg.UseLLMVision = true
+	if supportsAudioTranscriptions(cfg.LLMBaseURL) {
+		cfg.UseLLMAudio = true
+	} else {
+		cfg.UseLLMAudio = false
+	}
 	cfg.VisionMaxItems = 1
 	if cfg.UseLLMAudio {
 		cfg.AudioMaxItems = 1
@@ -1092,12 +1128,16 @@ func (s *webServer) pendingAnalysisPaths() []string {
 		if item.Content != nil {
 			continue
 		}
-		if item.Video == nil && item.Audio == nil {
+		if !itemSupportsAnalysis(item) {
 			continue
 		}
 		paths = append(paths, item.SourcePath)
 	}
 	return paths
+}
+
+func itemSupportsAnalysis(item Item) bool {
+	return itemSupportsVision(item) || item.Audio != nil
 }
 
 func clearItemAnalysis(item *Item) bool {
@@ -1217,7 +1257,8 @@ func (s *webServer) analyzeSourcePath(ctx context.Context, cfg Config, sourcePat
 			s.report.Warnings = append(s.report.Warnings, warning)
 		}
 	}
-	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	s.lastOrganizeUndo = nil
+	refreshReportDerived(&s.report, reportFilesDiscovered(s.report))
 	if selected[0].Content != nil || selected[0].Location != nil {
 		return warnings, 1
 	}
@@ -1282,7 +1323,7 @@ func (s *webServer) appendReportWarnings(warnings []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.report.Warnings = append(s.report.Warnings, warnings...)
-	s.report.Summary = summarize(s.report.Items, len(s.report.Items), len(s.report.Warnings))
+	refreshReportDerived(&s.report, reportFilesDiscovered(s.report))
 }
 
 type cliAnalysisProgress struct {

@@ -95,7 +95,7 @@ func runReview(args []string, stdout, stderr io.Writer, envWarnings []string) er
 	fs.IntVar(&options.FolderDepth, "folder-depth", 0, "maximum depth for existing destination folders; 0 means unlimited")
 	fs.BoolVar(&options.UseLLMFolderPlan, "llm-folder-plan", false, "use LLM folder planning when credentials are configured")
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: %s review [flags] <video-file-or-directory>...\n\n", cliName)
+		fmt.Fprintf(stderr, "Usage: %s review [flags] <media-file-or-directory>...\n\n", cliName)
 		fmt.Fprintln(stderr, "Writes a dry-run bundle with report JSON, Mermaid mindmap, folder plan, rename CSV, and apply request JSON.")
 		fmt.Fprintln(stderr, "\nFlags:")
 		fs.PrintDefaults()
@@ -121,7 +121,7 @@ func runReview(args []string, stdout, stderr io.Writer, envWarnings []string) er
 		return err
 	}
 	report.Warnings = append(envWarnings, report.Warnings...)
-	report.Summary = summarize(report.Items, report.Summary.FilesDiscovered, len(report.Warnings))
+	refreshReportDerived(&report, reportFilesDiscovered(report))
 
 	bundle, applyRequest, err := buildReviewBundle(ctx, cfg, report, fs.Args(), options)
 	if err != nil {

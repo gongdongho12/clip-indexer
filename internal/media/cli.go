@@ -29,6 +29,8 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		switch args[0] {
 		case "dev":
 			return runDev(args[1:], stdout, stderr)
+		case "export":
+			return runExport(args[1:], stdout, stderr, envWarnings)
 		case "serve":
 			return runServe(args[1:], stdout, stderr, envWarnings)
 		case "review":
@@ -47,14 +49,16 @@ func Run(args []string, stdout, stderr io.Writer) error {
 }
 
 func printRootUsage(stderr io.Writer) {
-	fmt.Fprintf(stderr, "Usage: %s <command> [flags] <video-file-or-directory>...\n\n", cliName)
+	fmt.Fprintf(stderr, "Usage: %s <command> [flags] <media-file-or-directory>...\n\n", cliName)
 	fmt.Fprintln(stderr, "Commands:")
 	fmt.Fprintln(stderr, "  index    emit a JSON report (default)")
+	fmt.Fprintln(stderr, "  export   write a static HTML report bundle")
 	fmt.Fprintln(stderr, "  review   write a dry-run review bundle with Mermaid and folder plans")
 	fmt.Fprintln(stderr, "  serve    launch the local file-manager web UI")
 	fmt.Fprintln(stderr, "  dev      run the web UI and restart it when source files change")
 	fmt.Fprintln(stderr, "\nExamples:")
 	fmt.Fprintf(stderr, "  %s --pretty --trip seoul ~/Movies/trip\n", cliName)
+	fmt.Fprintf(stderr, "  %s export --trip seoul ~/Movies/trip\n", cliName)
 	fmt.Fprintf(stderr, "  %s review --trip seoul --dest-root ~/Movies/organized ~/Movies/trip\n", cliName)
 	fmt.Fprintf(stderr, "  %s serve --trip seoul ~/Movies/trip\n", cliName)
 	fmt.Fprintf(stderr, "  %s dev --trip seoul ~/Movies/trip\n", cliName)
@@ -69,9 +73,9 @@ func runIndex(args []string, stdout, stderr io.Writer, envWarnings []string) err
 	addIndexFlags(fs, &cfg)
 	fs.BoolVar(&showVersion, "version", false, "print version")
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: %s [flags] <video-file-or-directory>...\n\n", cliName)
-		fmt.Fprintf(stderr, "       %s index [flags] <video-file-or-directory>...\n\n", cliName)
-		fmt.Fprintln(stderr, "Indexes travel footage and emits JSON with shot dates, tags, and suggested filenames.")
+		fmt.Fprintf(stderr, "Usage: %s [flags] <media-file-or-directory>...\n\n", cliName)
+		fmt.Fprintf(stderr, "       %s index [flags] <media-file-or-directory>...\n\n", cliName)
+		fmt.Fprintln(stderr, "Indexes local media and emits JSON with shot dates, tags, and suggested filenames.")
 		fmt.Fprintln(stderr, "\nFlags:")
 		fs.PrintDefaults()
 	}
@@ -97,7 +101,7 @@ func runIndex(args []string, stdout, stderr io.Writer, envWarnings []string) err
 		return err
 	}
 	report.Warnings = append(envWarnings, report.Warnings...)
-	report.Summary = summarize(report.Items, report.Summary.FilesDiscovered, len(report.Warnings))
+	refreshReportDerived(&report, reportFilesDiscovered(report))
 
 	encoder := json.NewEncoder(stdout)
 	encoder.SetEscapeHTML(false)
@@ -111,21 +115,21 @@ func addIndexFlags(fs *flag.FlagSet, cfg *Config) {
 	fs.BoolVar(&cfg.Recursive, "recursive", cfg.Recursive, "scan directories recursively")
 	fs.BoolVar(&cfg.Recursive, "r", cfg.Recursive, "scan directories recursively")
 	fs.BoolVar(&cfg.Pretty, "pretty", cfg.Pretty, "pretty-print JSON output")
-	fs.BoolVar(&cfg.IncludeUnsupported, "include-unsupported", cfg.IncludeUnsupported, "include files even when their extension is not a known video type")
+	fs.BoolVar(&cfg.IncludeUnsupported, "include-unsupported", cfg.IncludeUnsupported, "include files even when their extension is not a known media type")
 	fs.StringVar(&cfg.Trip, "trip", cfg.Trip, "trip or project name to include in suggested filenames")
 	fs.StringVar(&cfg.FFProbePath, "ffprobe", cfg.FFProbePath, "path to ffprobe executable")
 	fs.StringVar(&cfg.FFMpegPath, "ffmpeg", cfg.FFMpegPath, "path to ffmpeg executable for vision frame extraction")
 	fs.StringVar(&cfg.AnalysisLanguage, "analysis-language", cfg.AnalysisLanguage, "analysis output language: auto, ko, en, zh, or ja")
 	fs.BoolVar(&cfg.UseLLM, "llm", cfg.UseLLM, "enrich tags and final filenames with an OpenAI-compatible chat endpoint")
-	fs.BoolVar(&cfg.UseLLMVision, "llm-vision", cfg.UseLLMVision, "sample video frames and ask the LLM for scene and location hints")
+	fs.BoolVar(&cfg.UseLLMVision, "llm-vision", cfg.UseLLMVision, "sample visual media frames and ask the LLM for scene and location hints")
 	fs.BoolVar(&cfg.UseLLMAudio, "llm-audio", cfg.UseLLMAudio, "extract audio and ask the LLM for transcript, sound tags, and spoken context")
 	fs.BoolVar(&cfg.VisionAdaptive, "vision-adaptive", cfg.VisionAdaptive, "adapt vision frame sampling to clip duration; disable to use --vision-frames exactly")
-	fs.IntVar(&cfg.VisionFrames, "vision-frames", cfg.VisionFrames, "minimum frames to sample per video when adaptive vision is enabled; exact count when --vision-adaptive=false")
+	fs.IntVar(&cfg.VisionFrames, "vision-frames", cfg.VisionFrames, "minimum frames to sample per visual media file when adaptive vision is enabled; exact count when --vision-adaptive=false")
 	fs.IntVar(&cfg.VisionSampleIntervalSeconds, "vision-sample-interval", cfg.VisionSampleIntervalSeconds, "sample one vision frame about every N seconds; 0 uses adaptive duration sampling or --vision-frames")
-	fs.IntVar(&cfg.VisionMaxItems, "vision-max-items", cfg.VisionMaxItems, "maximum videos to analyze with --llm-vision; 0 means all")
+	fs.IntVar(&cfg.VisionMaxItems, "vision-max-items", cfg.VisionMaxItems, "maximum visual media files to analyze with --llm-vision; 0 means all")
 	fs.StringVar(&cfg.VisionPromptFile, "vision-prompt-file", cfg.VisionPromptFile, "path to a custom system prompt for --llm-vision")
-	fs.IntVar(&cfg.AudioMaxSeconds, "audio-max-seconds", cfg.AudioMaxSeconds, "maximum seconds of audio to transcribe per video when --llm-audio is enabled")
-	fs.IntVar(&cfg.AudioMaxItems, "audio-max-items", cfg.AudioMaxItems, "maximum videos to analyze with --llm-audio; 0 means all")
+	fs.IntVar(&cfg.AudioMaxSeconds, "audio-max-seconds", cfg.AudioMaxSeconds, "maximum seconds of audio to transcribe per media file when --llm-audio is enabled")
+	fs.IntVar(&cfg.AudioMaxItems, "audio-max-items", cfg.AudioMaxItems, "maximum media files to analyze with --llm-audio; 0 means all")
 	fs.StringVar(&cfg.AudioModel, "audio-model", cfg.AudioModel, "audio transcription model name")
 	fs.StringVar(&cfg.LLMBaseURL, "llm-base-url", cfg.LLMBaseURL, "LLM API base URL")
 	fs.Func("llm-api-key", "LLM API key", func(value string) error {
@@ -209,7 +213,7 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 		report.Warnings = append(report.Warnings, saveAnalysisCaches(report.Items)...)
 	}
 
-	report.Summary = summarize(report.Items, len(paths), len(report.Warnings))
+	refreshReportDerived(&report, len(paths))
 	return report, nil
 }
 
@@ -388,10 +392,14 @@ func summarize(items []Item, discovered int, reportWarnings int) Summary {
 		Warnings:        reportWarnings,
 	}
 	for _, item := range items {
+		mediaType := itemMediaType(item)
 		if item.ShotAt != "" {
 			summary.WithShotDate++
 		}
-		if item.Video != nil {
+		if mediaType == mediaTypeImage {
+			summary.WithImageFile++
+		}
+		if mediaType == mediaTypeVideo {
 			summary.WithVideoStream++
 		}
 		if item.Audio != nil {

@@ -33,7 +33,7 @@ func runDev(args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "help", "-h", "--help":
-			fmt.Fprintf(stderr, "Usage: %s dev [serve flags] <video-file-or-directory>...\n\n", cliName)
+			fmt.Fprintf(stderr, "Usage: %s dev [serve flags] <media-file-or-directory>...\n\n", cliName)
 			fmt.Fprintln(stderr, "Runs the web UI through `go run` and restarts it when Go or embedded web files change.")
 			return nil
 		}

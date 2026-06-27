@@ -36,8 +36,7 @@ func Discover(inputs []string, recursive bool, includeUnsupported bool) ([]strin
 			}
 			return
 		}
-		ext := strings.ToLower(filepath.Ext(path))
-		if !includeUnsupported && !videoExtensions[ext] {
+		if !includeUnsupported && supportedMediaType(path) == "" {
 			if explicit {
 				warnings = append(warnings, fmt.Sprintf("skipped unsupported file extension: %s", path))
 			}

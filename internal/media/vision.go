@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultVisionSystemPrompt     = "You analyze chronologically sampled travel video frames. Use all frames together rather than overfitting to one image. Infer visible scene content, activities, useful concise tags, and a cautious location guess if landmarks, signs, transit names, coastline, mountains, buildings, or other visual clues support it. For short clips, look for stable details across beginning, middle, and end frames. For longer clips, summarize the dominant scene and note meaningful changes. Include scene/activity tags such as street, restaurant, hotel, airport, train, beach, mountain, night_view, walking, driving, food, people, indoor, outdoor. If a place is visually identifiable, include location_label and also include that place name in tags. Do not invent precise coordinates. Return only JSON: {\"items\":[{\"source_path\":\"...\",\"tags\":[\"...\"],\"scene_summary\":\"...\",\"location_guess\":\"...\",\"location_confidence\":0.0,\"location_label\":\"...\",\"suggested_slug\":\"...\",\"final_file_name\":\"...\",\"notes\":\"...\"}]}"
+	defaultVisionSystemPrompt     = "You analyze travel media visuals: a photo, image, or chronologically sampled video frames. Use all provided visuals together rather than overfitting to one frame. Infer visible scene content, activities, useful concise tags, and a cautious location guess if landmarks, signs, transit names, coastline, mountains, buildings, or other visual clues support it. For short clips, look for stable details across beginning, middle, and end frames. For longer clips, summarize the dominant scene and note meaningful changes. Include scene/activity tags such as street, restaurant, hotel, airport, train, beach, mountain, night_view, walking, driving, food, people, indoor, outdoor. If a place is visually identifiable, include location_label and also include that place name in tags. Do not invent precise coordinates. Return only JSON: {\"items\":[{\"source_path\":\"...\",\"tags\":[\"...\"],\"scene_summary\":\"...\",\"location_guess\":\"...\",\"location_confidence\":0.0,\"location_label\":\"...\",\"suggested_slug\":\"...\",\"final_file_name\":\"...\",\"notes\":\"...\"}]}"
 	minAdaptiveVisionFrames       = 4
 	maxAdaptiveVisionFrames       = 8
 	adaptiveVisionSecondsPerFrame = 12
@@ -65,7 +65,7 @@ func EnrichWithVision(ctx context.Context, cfg Config, items []Item) []string {
 		if analyzed >= limit {
 			break
 		}
-		if items[index].Video == nil {
+		if !itemSupportsVision(items[index]) {
 			continue
 		}
 		output, frameCount, itemWarnings := analyzeItemWithVision(ctx, cfg, items[index])
@@ -233,6 +233,30 @@ func extractVisionFrames(ctx context.Context, cfg Config, item Item) ([]visionFr
 	cleanup := func() {
 		_ = os.RemoveAll(tempDir)
 	}
+	if itemMediaType(item) == mediaTypeImage {
+		framePath := filepath.Join(tempDir, "image.jpg")
+		cmd := exec.CommandContext(
+			ctx,
+			cfg.FFMpegPath,
+			"-v", "error",
+			"-i", item.SourcePath,
+			"-frames:v", "1",
+			"-vf", "scale=960:-2",
+			"-q:v", "4",
+			framePath,
+		)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+		}
+		data, err := os.ReadFile(framePath)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		return []visionFrame{{Second: 0, Data: data}}, cleanup, nil
+	}
 
 	count := visionFrameCount(item.DurationSeconds, cfg)
 	var frames []visionFrame
@@ -269,6 +293,10 @@ func extractVisionFrames(ctx context.Context, cfg Config, item Item) ([]visionFr
 		frames = append(frames, visionFrame{Second: second, Data: data})
 	}
 	return frames, cleanup, nil
+}
+
+func itemSupportsVision(item Item) bool {
+	return itemMediaType(item) == mediaTypeImage || item.Video != nil
 }
 
 func visionFrameCount(duration float64, cfg Config) int {

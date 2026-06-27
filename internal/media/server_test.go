@@ -329,6 +329,77 @@ func TestHandleOrganizeUsesDefaultRootWhenMissing(t *testing.T) {
 	}
 }
 
+func TestHandleUndoOrganizeMovesFilesBack(t *testing.T) {
+	dir := t.TempDir()
+	sourceDir := filepath.Join(dir, "input")
+	groupRoot := filepath.Join(dir, "organized")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(sourceDir, "clip.mp4")
+	if err := os.WriteFile(source, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &webServer{
+		report: Report{
+			Items: []Item{{
+				SourcePath:       source,
+				MediaType:        mediaTypeVideo,
+				OriginalFileName: filepath.Base(source),
+				Extension:        ".mp4",
+				Tags:             []string{"food", "cafe"},
+				FinalFileName:    "clip.mp4",
+			}},
+		},
+	}
+
+	body, err := json.Marshal(organizeRequest{Root: groupRoot, SourcePaths: []string{source}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	organizeRequest := httptest.NewRequest(http.MethodPost, "/api/organize", bytes.NewReader(body))
+	organizeResponseRecorder := httptest.NewRecorder()
+	server.handleOrganize(organizeResponseRecorder, organizeRequest)
+	if organizeResponseRecorder.Code != http.StatusOK {
+		t.Fatalf("expected organize ok, got %d: %s", organizeResponseRecorder.Code, organizeResponseRecorder.Body.String())
+	}
+	target := filepath.Join(groupRoot, "food", "clip.mp4")
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("expected organized file: %v", err)
+	}
+	var organizePayload organizeResponse
+	if err := json.Unmarshal(organizeResponseRecorder.Body.Bytes(), &organizePayload); err != nil {
+		t.Fatal(err)
+	}
+	if !organizePayload.Undo.Available || organizePayload.Undo.Count != 1 {
+		t.Fatalf("expected undo state after organize, got %#v", organizePayload.Undo)
+	}
+
+	undoRequest := httptest.NewRequest(http.MethodPost, "/api/undo-organize", nil)
+	undoResponseRecorder := httptest.NewRecorder()
+	server.handleUndoOrganize(undoResponseRecorder, undoRequest)
+	if undoResponseRecorder.Code != http.StatusOK {
+		t.Fatalf("expected undo ok, got %d: %s", undoResponseRecorder.Code, undoResponseRecorder.Body.String())
+	}
+	if _, err := os.Stat(source); err != nil {
+		t.Fatalf("expected original file after undo: %v", err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("expected organized target removed, stat err=%v", err)
+	}
+	var undoPayload undoOrganizeResponse
+	if err := json.Unmarshal(undoResponseRecorder.Body.Bytes(), &undoPayload); err != nil {
+		t.Fatal(err)
+	}
+	if undoPayload.Undone != 1 || undoPayload.Undo.Available {
+		t.Fatalf("expected undo to be consumed, got %#v", undoPayload)
+	}
+	if server.report.Items[0].SourcePath != source {
+		t.Fatalf("expected report source path to be restored, got %s", server.report.Items[0].SourcePath)
+	}
+}
+
 func TestHandleFolderPlanUsesDefaultRootWhenMissing(t *testing.T) {
 	dir := t.TempDir()
 	sourceDir := filepath.Join(dir, "input")

@@ -96,3 +96,22 @@ func TestBuildTagsIncludesLocationTags(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildTagsUsesMediaTypeSpecificBaseTags(t *testing.T) {
+	imageTags := BuildTags("photo.jpg", time.Time{}, ProbeResult{})
+	if !slices.Contains(imageTags, "image") || slices.Contains(imageTags, "video") || slices.Contains(imageTags, "silent") {
+		t.Fatalf("expected image-specific tags, got %v", imageTags)
+	}
+
+	audioTags := BuildTags("voice.m4a", time.Time{}, ProbeResult{Audio: &AudioInfo{Codec: "aac"}})
+	if !slices.Contains(audioTags, "audio") || slices.Contains(audioTags, "video") {
+		t.Fatalf("expected audio-specific tags, got %v", audioTags)
+	}
+}
+
+func TestBuildItemSetsMediaType(t *testing.T) {
+	item := BuildItem("/tmp/photo.jpg", 1, "", ProbeResult{})
+	if item.MediaType != mediaTypeImage {
+		t.Fatalf("expected image media type, got %q", item.MediaType)
+	}
+}

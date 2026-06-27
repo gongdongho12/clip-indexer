@@ -30,12 +30,24 @@ type Config struct {
 }
 
 type Report struct {
-	Service     ServiceInfo   `json:"service"`
-	GeneratedAt string        `json:"generated_at"`
-	Options     ReportOptions `json:"options"`
-	Items       []Item        `json:"items"`
-	Summary     Summary       `json:"summary"`
-	Warnings    []string      `json:"warnings,omitempty"`
+	Service     ServiceInfo      `json:"service"`
+	GeneratedAt string           `json:"generated_at"`
+	Options     ReportOptions    `json:"options"`
+	Items       []Item           `json:"items"`
+	FolderTree  []FolderTreeNode `json:"folder_tree,omitempty"`
+	Summary     Summary          `json:"summary"`
+	Warnings    []string         `json:"warnings,omitempty"`
+}
+
+type FolderTreeNode struct {
+	Name           string           `json:"name"`
+	Path           string           `json:"path"`
+	RelativePath   string           `json:"relative_path,omitempty"`
+	Depth          int              `json:"depth"`
+	FileCount      int              `json:"file_count"`
+	TotalFileCount int              `json:"total_file_count"`
+	Files          []string         `json:"files,omitempty"`
+	Children       []FolderTreeNode `json:"children,omitempty"`
 }
 
 type ServiceInfo struct {
@@ -65,6 +77,7 @@ type ReportOptions struct {
 type Summary struct {
 	FilesDiscovered int `json:"files_discovered"`
 	FilesIndexed    int `json:"files_indexed"`
+	WithImageFile   int `json:"with_image_file"`
 	WithShotDate    int `json:"with_shot_date"`
 	WithVideoStream int `json:"with_video_stream"`
 	WithAudioStream int `json:"with_audio_stream"`
@@ -75,6 +88,7 @@ type Summary struct {
 
 type Item struct {
 	SourcePath          string        `json:"source_path"`
+	MediaType           string        `json:"media_type"`
 	OriginalFileName    string        `json:"original_file_name"`
 	Extension           string        `json:"extension"`
 	ShotAt              string        `json:"shot_at,omitempty"`
