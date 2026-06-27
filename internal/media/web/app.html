@@ -1501,6 +1501,52 @@
         .map((item) => item.source_path);
     }
 
+    function allFilesSelected() {
+      const items = state.report?.items || [];
+      return items.length > 0 && items.every((item) => state.selected.has(item.source_path));
+    }
+
+    function selectEveryIndexedFile() {
+      for (const item of state.report?.items || []) {
+        state.selected.add(item.source_path);
+      }
+      renderRows();
+      renderDetail();
+    }
+
+    function clearSelectedFiles() {
+      state.selected.clear();
+      renderRows();
+      renderDetail();
+    }
+
+    function toggleEveryIndexedFile() {
+      const items = state.report?.items || [];
+      if (!items.length) return;
+      if (allFilesSelected()) {
+        clearSelectedFiles();
+        log("Cleared file selection", "ok");
+      } else {
+        selectEveryIndexedFile();
+        log(`Selected ${items.length} file(s)`, "ok");
+      }
+    }
+
+    function isEditableShortcutTarget(target) {
+      if (!(target instanceof Element)) return false;
+      if (target.closest("[contenteditable=true]")) return true;
+      return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+    }
+
+    function handleGlobalShortcut(event) {
+      if (event.repeat || event.altKey || event.shiftKey) return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (String(event.key).toLowerCase() !== "a") return;
+      if (isEditableShortcutTarget(event.target)) return;
+      event.preventDefault();
+      toggleEveryIndexedFile();
+    }
+
     function itemKey(item) {
       return item.source_path;
     }
@@ -2604,16 +2650,10 @@
       renderDetail();
     });
     $("selectEveryFile").addEventListener("click", () => {
-      for (const item of state.report?.items || []) {
-        state.selected.add(item.source_path);
-      }
-      renderRows();
-      renderDetail();
+      selectEveryIndexedFile();
     });
     $("clearSelection").addEventListener("click", () => {
-      state.selected.clear();
-      renderRows();
-      renderDetail();
+      clearSelectedFiles();
     });
     $("showJson").addEventListener("click", () => {
       state.showJson = !state.showJson;
@@ -2647,6 +2687,8 @@
       if (event.target.id === "previewModal") closePreview();
     });
     window.addEventListener("keydown", (event) => {
+      handleGlobalShortcut(event);
+      if (event.defaultPrevented) return;
       if (event.key !== "Escape") return;
       if (state.tagMapOpen) {
         closeTagMap();
