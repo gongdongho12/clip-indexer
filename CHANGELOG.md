@@ -2,6 +2,15 @@
 
 All notable changes to **Clip Atlas** are documented in this file.
 
+## 2026-06-28
+
+Built from `dd9b2de4c397`. **2** commit(s) processed.
+Changes since `v0.1.5`.
+
+### Documentation
+- finalize codex plugin packaging skill (`dd9b2de4c3`)
+- update CHANGELOG.md [skip ci] (`43c608a554`)
+
 ## 2026-06-27
 
 Built from `992c2739d2c4`. **2** commit(s) processed.
