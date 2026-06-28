@@ -226,7 +226,8 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
     tr { cursor: pointer; }
     tr:hover, tr.active { background: #eef8f7; }
     .name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .path, .tags, .muted { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .path, .tags, .muted, .description-cell { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .description-cell { line-height: 1.35; }
     .actions { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
     .actions a, .actions button { min-height:30px; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); font:inherit; font-size:12px; text-decoration:none; cursor:pointer; }
     .actions a:hover, .actions button:hover { border-color: var(--accent); }
@@ -238,7 +239,19 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
     .preview-title { padding:8px 12px; background:#101820; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .detail { min-height:0; overflow:auto; padding:14px; }
     .detail h2 { margin:0 0 10px; font-size:16px; }
-    .grid { display:grid; grid-template-columns: 96px minmax(0, 1fr); gap:7px 10px; font-size:13px; color:var(--muted); }
+    .detail-section { padding:12px 0; border-top:1px solid var(--line); }
+    .detail-section:first-of-type { margin-top:10px; }
+    .detail-section h3 { margin:0 0 8px; color:var(--muted); font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0; }
+    .detail-label { margin:10px 0 4px; color:var(--muted); font-size:12px; font-weight:800; }
+    .detail-text { margin:0 0 8px; color:var(--ink); font-size:13px; line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .transcript { margin:8px 0 0; }
+    .transcript summary { cursor:pointer; color:var(--accent); font-size:13px; font-weight:700; }
+    .pills { display:flex; flex-wrap:wrap; gap:6px; }
+    .pill { padding:4px 7px; border:1px solid var(--line); border-radius:999px; background:#f8fbfb; color:var(--ink); font-size:12px; }
+    .raw-json { margin-top:4px; }
+    .raw-json summary { cursor:pointer; color:var(--accent); font-size:13px; font-weight:700; }
+    .raw-json pre { max-height:320px; overflow:auto; margin:8px 0 0; padding:10px; border:1px solid var(--line); border-radius:7px; background:#f8fafb; color:var(--ink); font-size:12px; line-height:1.4; white-space:pre-wrap; }
+    .grid { display:grid; grid-template-columns: 112px minmax(0, 1fr); gap:7px 10px; font-size:13px; color:var(--muted); }
     .grid strong { color:var(--ink); overflow-wrap:anywhere; }
     @media (max-width: 1060px) { main { grid-template-columns: minmax(0, 1fr); } .nav { max-height: 320px; border-right:0; border-bottom:1px solid var(--line); } .side { position:static; height:auto; border-left:0; border-top:1px solid var(--line); } th { top:0; } table { min-width: 760px; } }
   </style>
@@ -262,7 +275,7 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
     <section class="list">
       <div class="toolbar"><input id="filter" type="search" placeholder="Filter files, tags, folders"><button id="clearFilter" type="button">Clear</button></div>
       <table>
-        <thead><tr><th style="width:28%">File</th><th style="width:10%">Media</th><th style="width:16%">Shot</th><th>Tags</th><th style="width:16%">Final</th><th style="width:12%">Actions</th></tr></thead>
+        <thead><tr><th style="width:24%">File</th><th style="width:9%">Media</th><th style="width:14%">Shot</th><th style="width:22%">Description</th><th>Tags</th><th style="width:14%">Final</th><th style="width:11%">Actions</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </section>
@@ -285,10 +298,73 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
     function shot(value) { if (!value) return "-"; const date = new Date(value); return Number.isNaN(date.valueOf()) ? value : date.toLocaleString(); }
     function item(path) { return files.find((file) => file.source_path === path); }
     function reportItem(path) { return (report.items || []).find((file) => file.source_path === path); }
+    function compact(values) {
+      const output = [];
+      const seen = new Set();
+      for (const value of values || []) {
+        const text = String(value ?? "").trim();
+        if (!text || seen.has(text)) continue;
+        seen.add(text);
+        output.push(text);
+      }
+      return output;
+    }
+    function firstText(values) {
+      return compact(values)[0] || "";
+    }
+    function clipText(value, max) {
+      const text = String(value ?? "").trim().replace(/\s+/g, " ");
+      if (!text) return "";
+      return text.length > max ? text.slice(0, Math.max(0, max - 3)) + "..." : text;
+    }
+    function confidence(value) {
+      if (value === undefined || value === null || value === "") return "";
+      const number = Number(value);
+      if (!Number.isFinite(number)) return "";
+      return Math.round(number * 100) + "%";
+    }
+    function coordinates(location) {
+      if (!location || !Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)) return "";
+      return location.latitude.toFixed(6) + ", " + location.longitude.toFixed(6);
+    }
+    function allTags(file, source) {
+      return compact([...(file?.tags || []), ...(source?.content?.tags || []), ...(source?.content?.audio_tags || [])]);
+    }
+    function descriptionText(source) {
+      const content = source?.content || {};
+      return firstText([content.scene_summary, content.audio_summary, content.notes, source?.llm_notes, content.audio_transcript]);
+    }
+    function searchableText(file, source) {
+      const content = source?.content || {};
+      const location = source?.location || {};
+      return [
+        file.source_path,
+        file.original_file_name,
+        file.final_file_name,
+        file.folder,
+        allTags(file, source).join(" "),
+        content.scene_summary,
+        content.audio_summary,
+        content.audio_transcript,
+        content.location_guess,
+        content.notes,
+        content.model,
+        content.audio_model,
+        source?.llm_notes,
+        source?.group?.label,
+        source?.group?.folder,
+        source?.group?.reason,
+        location.label,
+        location.source,
+        location.notes,
+        (source?.warnings || []).join(" ")
+      ].join(" ").toLowerCase();
+    }
     function stats() {
       const summary = report.summary || {};
+      const descriptions = (report.items || []).filter((source) => descriptionText(source)).length;
       $("subtitle").textContent = report.options?.trip || "Static media report";
-      $("stats").innerHTML = [["Files", summary.files_indexed || files.length], ["Images", summary.with_image_file || 0], ["Video", summary.with_video_stream || 0], ["Audio", summary.with_audio_stream || 0], ["Scene", summary.with_content || 0]].map(([label, value]) => "<div class=\"stat\"><strong>" + esc(value) + "</strong>" + esc(label) + "</div>").join("");
+      $("stats").innerHTML = [["Files", summary.files_indexed || files.length], ["Images", summary.with_image_file || 0], ["Video", summary.with_video_stream || 0], ["Audio", summary.with_audio_stream || 0], ["Scene", summary.with_content || 0], ["Descriptions", descriptions]].map(([label, value]) => "<div class=\"stat\"><strong>" + esc(value) + "</strong>" + esc(label) + "</div>").join("");
     }
     function mediaElement(file) {
       const src = file.export_path || "";
@@ -307,21 +383,22 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
     function tagEntries() {
       const counts = new Map();
       for (const file of files) {
-        const item = reportItem(file.source_path) || {};
-        const tags = new Set([...(file.tags || []), ...(item.content?.tags || []), ...(item.content?.audio_tags || [])].filter(Boolean));
-        for (const tag of tags) counts.set(tag, (counts.get(tag) || 0) + 1);
+        const source = reportItem(file.source_path) || {};
+        for (const tag of allTags(file, source)) counts.set(tag, (counts.get(tag) || 0) + 1);
       }
       return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 80);
     }
-    function actionHTML(file) {
+    function actionHTML(file, includeJSON = false) {
       const open = file.export_path ? "<a href=\"" + esc(file.export_path) + "\" target=\"_blank\" rel=\"noopener\">Open</a>" : "";
-      return "<div class=\"actions\">" + open + "<button type=\"button\" data-copy-path=\"" + esc(file.source_path) + "\">Copy path</button></div>";
+      const json = includeJSON ? "<button type=\"button\" data-copy-json=\"" + esc(file.source_path) + "\">Copy JSON</button>" : "";
+      return "<div class=\"actions\">" + open + "<button type=\"button\" data-copy-path=\"" + esc(file.source_path) + "\">Copy path</button>" + json + "</div>";
     }
-    async function copyPath(path) {
+    async function copyText(label, value) {
       try {
-        await navigator.clipboard.writeText(path);
+        if (!navigator.clipboard) throw new Error("clipboard unavailable");
+        await navigator.clipboard.writeText(value);
       } catch {
-        window.prompt("Copy path", path);
+        window.prompt(label, value);
       }
     }
     function folderMatches(file) {
@@ -330,26 +407,16 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
     }
     function tagMatches(file) {
       if (!selectedTag) return true;
-      const item = reportItem(file.source_path) || {};
-      const tags = [...(file.tags || []), ...(item.content?.tags || []), ...(item.content?.audio_tags || [])];
-      return tags.includes(selectedTag);
+      const source = reportItem(file.source_path) || {};
+      return allTags(file, source).includes(selectedTag);
     }
     function filteredFiles() {
       const query = $("filter").value.trim().toLowerCase();
       return files.filter((file) => {
         if (!folderMatches(file) || !tagMatches(file)) return false;
         if (!query) return true;
-        const item = reportItem(file.source_path) || {};
-        return [
-          file.source_path,
-          file.final_file_name,
-          file.folder,
-          (file.tags || []).join(" "),
-          item.content?.scene_summary || "",
-          item.content?.audio_summary || "",
-          item.content?.audio_transcript || "",
-          item.content?.location_guess || ""
-        ].join(" ").toLowerCase().includes(query);
+        const source = reportItem(file.source_path) || {};
+        return searchableText(file, source).includes(query);
       });
     }
     function renderMaps() {
@@ -367,26 +434,126 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
         render();
       }));
     }
+    function textBlock(value) {
+      const text = String(value ?? "").trim();
+      return text ? "<p class=\"detail-text\">" + esc(text) + "</p>" : "";
+    }
+    function labeledText(label, value) {
+      const text = String(value ?? "").trim();
+      if (!text) return "";
+      return "<div class=\"detail-label\">" + esc(label) + "</div>" + textBlock(text);
+    }
+    function detailSection(title, body) {
+      return body ? "<section class=\"detail-section\"><h3>" + esc(title) + "</h3>" + body + "</section>" : "";
+    }
+    function detailGrid(rows) {
+      const cells = [];
+      for (const row of rows) {
+        const value = Array.isArray(row[1]) ? compact(row[1]).join(", ") : String(row[1] ?? "").trim();
+        if (!value) continue;
+        cells.push("<span>" + esc(row[0]) + "</span><strong>" + esc(value) + "</strong>");
+      }
+      return cells.length ? "<div class=\"grid\">" + cells.join("") + "</div>" : "";
+    }
+    function pillList(values) {
+      const tags = compact(values);
+      return tags.length ? "<div class=\"pills\">" + tags.map((tag) => "<span class=\"pill\">" + esc(tag) + "</span>").join("") + "</div>" : "";
+    }
+    function transcriptBlock(content) {
+      const transcript = String(content?.audio_transcript || "").trim();
+      if (!transcript) return "";
+      return "<details class=\"transcript\" open><summary>Audio Transcript</summary>" + textBlock(transcript) + "</details>";
+    }
+    function analysisMeta(source) {
+      const content = source?.content || {};
+      return detailGrid([
+        ["Frame Count", content.frame_count],
+        ["Audio Seconds", content.audio_seconds],
+        ["Vision Model", content.model],
+        ["Audio Model", content.audio_model],
+        ["Item Confidence", confidence(source?.confidence)],
+        ["Location Confidence", confidence(content.location_confidence)]
+      ]);
+    }
+    function locationDetail(source) {
+      const content = source?.content || {};
+      const location = source?.location || {};
+      return detailGrid([
+        ["Label", location.label || content.location_guess],
+        ["Coordinates", coordinates(location)],
+        ["Source", location.source],
+        ["Confidence", confidence(location.confidence !== undefined && location.confidence !== null ? location.confidence : content.location_confidence)],
+        ["Notes", location.notes]
+      ]);
+    }
+    function rawJSON(source) {
+      if (!source || !source.source_path) return "";
+      return "<details class=\"raw-json\"><summary>View item JSON</summary><pre>" + esc(JSON.stringify(source, null, 2)) + "</pre></details>";
+    }
     function renderRows() {
       const rows = filteredFiles();
-      $("rows").innerHTML = rows.map((file) => "<tr data-path=\"" + esc(file.source_path) + "\" class=\"" + (file.source_path === active ? "active" : "") + "\"><td><div class=\"name\">" + esc(base(file.source_path)) + "</div><div class=\"path\">" + esc(file.source_path) + "</div></td><td>" + esc(file.media_type || "-") + "</td><td>" + esc(shot(file.shot_at)) + "</td><td class=\"tags\">" + esc((file.tags || []).join(", ")) + "</td><td>" + esc(file.final_file_name || "") + "</td><td>" + actionHTML(file) + "</td></tr>").join("");
-      document.querySelectorAll("tr[data-path]").forEach((row) => row.addEventListener("click", () => { active = row.dataset.path; render(); }));
+      $("rows").innerHTML = rows.map((file) => {
+        const source = reportItem(file.source_path) || {};
+        return "<tr data-path=\"" + esc(file.source_path) + "\" class=\"" + (file.source_path === active ? "active" : "") + "\"><td><div class=\"name\">" + esc(base(file.source_path)) + "</div><div class=\"path\">" + esc(file.source_path) + "</div></td><td>" + esc(file.media_type || "-") + "</td><td>" + esc(shot(file.shot_at)) + "</td><td class=\"description-cell\">" + esc(clipText(descriptionText(source), 180) || "-") + "</td><td class=\"tags\">" + esc(allTags(file, source).join(", ")) + "</td><td>" + esc(file.final_file_name || "") + "</td><td>" + actionHTML(file) + "</td></tr>";
+      }).join("");
+      document.querySelectorAll("tr[data-path]").forEach((row) => row.addEventListener("click", (event) => {
+        if (event.target.closest("button,a")) return;
+        active = row.dataset.path;
+        render();
+      }));
     }
     function renderDetail() {
       const file = item(active);
       const source = reportItem(active) || {};
       if (!file) { $("preview").innerHTML = "<div class=\"audio-box\">Select a file</div>"; $("detail").innerHTML = ""; return; }
       $("preview").innerHTML = mediaElement(file) + "<div class=\"preview-title\">" + esc(base(file.source_path)) + "</div>";
-      $("detail").innerHTML = "<h2>" + esc(base(file.source_path)) + "</h2>" + actionHTML(file) + "<div class=\"grid\"><span>Media</span><strong>" + esc(file.media_type) + "</strong><span>Folder</span><strong>" + esc(file.folder || "-") + "</strong><span>Final</span><strong>" + esc(file.final_file_name || "-") + "</strong><span>Shot</span><strong>" + esc(shot(file.shot_at)) + "</strong><span>Scene</span><strong>" + esc(source.content?.scene_summary || source.content?.notes || "-") + "</strong><span>Audio</span><strong>" + esc(source.content?.audio_summary || source.content?.audio_transcript || "-") + "</strong><span>Location</span><strong>" + esc(source.location?.label || source.content?.location_guess || "-") + "</strong><span>Source</span><strong>" + esc(file.source_path) + "</strong><span>Export</span><strong>" + esc(file.export_path || "-") + "</strong><span>Tags</span><strong>" + esc((file.tags || []).join(", ")) + "</strong></div>";
+      const content = source.content || {};
+      const description = labeledText("Scene Description", content.scene_summary) + labeledText("Notes", content.notes) + labeledText("LLM Notes", source.llm_notes);
+      const audio = labeledText("Audio Summary", content.audio_summary) + transcriptBlock(content) + labeledText("Audio Tags", compact(content.audio_tags || []).join(", "));
+      const tags = pillList(allTags(file, source)) + labeledText("Content Tags", compact(content.tags || []).join(", ")) + labeledText("Audio Tags", compact(content.audio_tags || []).join(", "));
+      const grouping = detailGrid([
+        ["Folder", file.folder || source.group?.folder],
+        ["Group Label", source.group?.label],
+        ["Group Key", source.group?.key],
+        ["Group Reason", source.group?.reason]
+      ]);
+      const fileInfo = detailGrid([
+        ["Media", file.media_type || source.media_type],
+        ["Original", file.original_file_name || source.original_file_name],
+        ["Final", file.final_file_name || source.final_file_name],
+        ["Recommended", source.recommended_file_name],
+        ["Shot", shot(file.shot_at || source.shot_at)],
+        ["Duration", source.duration_seconds ? String(source.duration_seconds) + "s" : ""],
+        ["Video", source.video ? compact([source.video.codec, source.video.width && source.video.height ? source.video.width + "x" + source.video.height : "", source.video.fps ? Math.round(source.video.fps) + "fps" : ""]).join(" ") : ""],
+        ["Audio", source.audio ? compact([source.audio.codec, source.audio.channels ? source.audio.channels + "ch" : "", source.audio.sample_rate ? source.audio.sample_rate + "Hz" : ""]).join(" ") : ""],
+        ["Source", file.source_path],
+        ["Export", file.export_path || "-"]
+      ]);
+      const warnings = (source.warnings || []).length ? "<ul>" + source.warnings.map((warning) => "<li>" + esc(warning) + "</li>").join("") + "</ul>" : "";
+      $("detail").innerHTML = "<h2>" + esc(base(file.source_path)) + "</h2>" + actionHTML(file, true)
+        + detailSection("Description", description || textBlock("-"))
+        + detailSection("Audio", audio)
+        + detailSection("Tags", tags)
+        + detailSection("Analysis", analysisMeta(source))
+        + detailSection("Location", locationDetail(source))
+        + detailSection("Grouping", grouping)
+        + detailSection("Warnings", warnings)
+        + detailSection("File", fileInfo)
+        + detailSection("Raw JSON", rawJSON(source));
     }
     function render() { stats(); renderMaps(); renderRows(); renderDetail(); }
     $("filter").addEventListener("input", renderRows);
     $("clearFilter").addEventListener("click", () => { $("filter").value = ""; selectedFolder = ""; selectedTag = ""; render(); });
     document.addEventListener("click", (event) => {
-      const button = event.target.closest("[data-copy-path]");
-      if (!button) return;
+      const pathButton = event.target.closest("[data-copy-path]");
+      const jsonButton = event.target.closest("[data-copy-json]");
+      if (!pathButton && !jsonButton) return;
       event.stopPropagation();
-      copyPath(button.dataset.copyPath || "");
+      if (pathButton) copyText("Copy path", pathButton.dataset.copyPath || "");
+      if (jsonButton) {
+        const source = reportItem(jsonButton.dataset.copyJson || "");
+        copyText("Copy item JSON", JSON.stringify(source || {}, null, 2));
+      }
     });
     render();
   </script>

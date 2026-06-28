@@ -144,6 +144,8 @@ go run ./cmd/clip-indexer export \
 
 기본 export는 원본 경로와 분석 결과만 저장합니다. `--include-media`를 추가하면 export 폴더의 `media/` 아래로 원본 미디어를 복사해서 HTML에서 미리보기를 바로 열 수 있습니다.
 
+정적 HTML 뷰어는 폴더/태그 맵뿐 아니라 각 파일의 `scene_summary`, `audio_summary`, `audio_transcript`, `notes`, `llm_notes`, 위치 추정, 그룹 배정 이유, 분석 모델/프레임 메타데이터를 상세 패널에 표시합니다. 필요하면 선택한 항목의 원본 분석 JSON도 `Raw JSON` 섹션에서 확인하고 복사할 수 있습니다.
+
 생성 파일:
 
 - `index.html`: 서버 없이 여는 정적 뷰어
