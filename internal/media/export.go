@@ -1,6 +1,7 @@
 package media
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,7 @@ import (
 type exportOptions struct {
 	OutputDir    string
 	IncludeMedia bool
+	Overwrite    bool
 }
 
 type exportManifest struct {
@@ -38,7 +40,26 @@ type exportFile struct {
 	Tags             []string `json:"tags,omitempty"`
 }
 
-func runExport(args []string, stdout, stderr io.Writer, envWarnings []string) error {
+type exportConflictError struct {
+	Paths []string
+}
+
+func (err exportConflictError) Error() string {
+	if len(err.Paths) == 1 {
+		return fmt.Sprintf("export target already exists: %s", err.Paths[0])
+	}
+	paths := err.Paths
+	if len(paths) > 4 {
+		paths = paths[:4]
+	}
+	message := fmt.Sprintf("export targets already exist (%d): %s", len(err.Paths), strings.Join(paths, ", "))
+	if len(err.Paths) > len(paths) {
+		message += ", ..."
+	}
+	return message
+}
+
+func runExport(args []string, stdin io.Reader, stdout, stderr io.Writer, envWarnings []string) error {
 	cfg := defaultConfig()
 	options := exportOptions{}
 
@@ -47,6 +68,7 @@ func runExport(args []string, stdout, stderr io.Writer, envWarnings []string) er
 	addIndexFlags(fs, &cfg)
 	fs.StringVar(&options.OutputDir, "out-dir", "", "directory for static export; default tmp/clip-atlas-export/<timestamp>")
 	fs.BoolVar(&options.IncludeMedia, "include-media", false, "copy source media into the export bundle")
+	fs.BoolVar(&options.Overwrite, "overwrite", false, "overwrite existing export files without prompting")
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: %s export [flags] <media-file-or-directory>...\n\n", cliName)
 		fmt.Fprintln(stderr, "Writes index.html, report.json, and files.json for serverless viewing.")
@@ -76,6 +98,18 @@ func runExport(args []string, stdout, stderr io.Writer, envWarnings []string) er
 	refreshReportDerived(&report, reportFilesDiscovered(report))
 
 	manifest, err := writeStaticExport(report, options)
+	var conflictErr exportConflictError
+	if errors.As(err, &conflictErr) && !options.Overwrite {
+		confirmed, promptErr := confirmExportOverwrite(stdin, stderr, conflictErr.Paths)
+		if promptErr != nil {
+			return promptErr
+		}
+		if !confirmed {
+			return errors.New("export canceled")
+		}
+		options.Overwrite = true
+		manifest, err = writeStaticExport(report, options)
+	}
 	if err != nil {
 		return err
 	}
@@ -94,6 +128,11 @@ func writeStaticExport(report Report, options exportOptions) (exportManifest, er
 	absOutputDir, err := filepath.Abs(options.OutputDir)
 	if err != nil {
 		return exportManifest{}, err
+	}
+	if !options.Overwrite {
+		if conflicts := existingExportTargets(report.Items, absOutputDir, options.IncludeMedia); len(conflicts) > 0 {
+			return exportManifest{}, exportConflictError{Paths: conflicts}
+		}
 	}
 	if err := os.MkdirAll(absOutputDir, 0o755); err != nil {
 		return exportManifest{}, err
@@ -124,6 +163,51 @@ func writeStaticExport(report Report, options exportOptions) (exportManifest, er
 		return exportManifest{}, err
 	}
 	return manifest, nil
+}
+
+func existingExportTargets(items []Item, outputDir string, includeMedia bool) []string {
+	targets := []string{
+		filepath.Join(outputDir, "index.html"),
+		filepath.Join(outputDir, "report.json"),
+		filepath.Join(outputDir, "files.json"),
+		filepath.Join(outputDir, "manifest.json"),
+	}
+	if includeMedia {
+		for index, item := range items {
+			name := fmt.Sprintf("%04d_%s", index+1, sanitizeExportFileName(filepath.Base(item.SourcePath)))
+			targets = append(targets, filepath.Join(outputDir, "media", name))
+		}
+	}
+	conflicts := make([]string, 0, len(targets))
+	for _, target := range targets {
+		if _, err := os.Stat(target); err == nil {
+			conflicts = append(conflicts, target)
+		}
+	}
+	return conflicts
+}
+
+func confirmExportOverwrite(stdin io.Reader, stderr io.Writer, paths []string) (bool, error) {
+	fmt.Fprintln(stderr, "Export target files already exist:")
+	for index, path := range paths {
+		if index >= 10 {
+			fmt.Fprintf(stderr, "  ... and %d more\n", len(paths)-index)
+			break
+		}
+		fmt.Fprintf(stderr, "  %s\n", path)
+	}
+	fmt.Fprint(stderr, "Overwrite existing export files? [y/N] ")
+
+	answer, err := bufio.NewReader(stdin).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	switch strings.ToLower(strings.TrimSpace(answer)) {
+	case "y", "yes":
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func exportFiles(items []Item, outputDir string, includeMedia bool) ([]exportFile, error) {

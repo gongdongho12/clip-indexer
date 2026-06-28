@@ -2530,7 +2530,7 @@
       }
     }
 
-    async function readJSONResponse(response) {
+    async function responsePayload(response) {
       const text = await response.text();
       let payload = {};
       try {
@@ -2538,6 +2538,11 @@
       } catch {
         payload = { error: text };
       }
+      return { payload, text };
+    }
+
+    async function readJSONResponse(response) {
+      const { payload, text } = await responsePayload(response);
       if (!response.ok) {
         throw new Error(payload.error || payload.message || text || response.statusText);
       }
@@ -2729,12 +2734,33 @@
       try {
         await loadReport({ silent: true, nextActivePath: state.activePath });
         log(`Exporting static HTML${includeMedia ? " with media copies" : ""}`, "warn");
-        const response = await fetch("/api/export", {
+        const request = { include_media: includeMedia, output_dir: outputDir.trim() };
+        let response = await fetch("/api/export", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ include_media: includeMedia, output_dir: outputDir.trim() })
+          body: JSON.stringify(request)
         });
-        const payload = await readJSONResponse(response);
+        let { payload, text } = await responsePayload(response);
+        if (response.status === 409 && payload.overwrite_required) {
+          const conflicts = payload.conflicts || [];
+          const shown = conflicts.slice(0, 8).join("\n");
+          const extra = conflicts.length > 8 ? `\n... and ${conflicts.length - 8} more` : "";
+          const overwrite = window.confirm(`Export target files already exist. Overwrite them?\n\n${shown}${extra}`);
+          if (!overwrite) {
+            log("Export canceled; existing files were kept", "warn");
+            return;
+          }
+          log("Overwriting existing export files", "warn");
+          request.overwrite = true;
+          response = await fetch("/api/export", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(request)
+          });
+          payload = await readJSONResponse(response);
+        } else if (!response.ok) {
+          throw new Error(payload.error || payload.message || text || response.statusText);
+        }
         log(`Exported ${payload.files || 0} file(s) to ${payload.output_dir}`, "ok");
         log(`Export HTML: ${payload.html_path}`, "ok");
         await refreshReportAfterMutation(state.activePath);

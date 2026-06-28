@@ -656,6 +656,31 @@ func TestHandleExportWritesStaticHTML(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(outputDir, "media", "0001_photo.jpg")); err != nil {
 		t.Fatalf("expected copied media: %v", err)
 	}
+
+	conflictRequest := httptest.NewRequest(http.MethodPost, "/api/export", bytes.NewReader(requestBody))
+	conflictResponse := httptest.NewRecorder()
+	server.handleExport(conflictResponse, conflictRequest)
+	if conflictResponse.Code != http.StatusConflict {
+		t.Fatalf("expected conflict, got %d: %s", conflictResponse.Code, conflictResponse.Body.String())
+	}
+	var conflictPayload webExportConflictResponse
+	if err := json.Unmarshal(conflictResponse.Body.Bytes(), &conflictPayload); err != nil {
+		t.Fatal(err)
+	}
+	if !conflictPayload.OverwriteRequired || len(conflictPayload.Conflicts) == 0 {
+		t.Fatalf("unexpected conflict response: %#v", conflictPayload)
+	}
+
+	overwriteBody, err := json.Marshal(webExportRequest{OutputDir: outputDir, IncludeMedia: true, Overwrite: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	overwriteRequest := httptest.NewRequest(http.MethodPost, "/api/export", bytes.NewReader(overwriteBody))
+	overwriteResponse := httptest.NewRecorder()
+	server.handleExport(overwriteResponse, overwriteRequest)
+	if overwriteResponse.Code != http.StatusOK {
+		t.Fatalf("expected overwrite OK, got %d: %s", overwriteResponse.Code, overwriteResponse.Body.String())
+	}
 }
 
 func TestClearItemAnalysisPreservesMetadataLocation(t *testing.T) {

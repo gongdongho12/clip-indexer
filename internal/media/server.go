@@ -301,6 +301,14 @@ type clearAnalysisResponse struct {
 type webExportRequest struct {
 	OutputDir    string `json:"output_dir,omitempty"`
 	IncludeMedia bool   `json:"include_media"`
+	Overwrite    bool   `json:"overwrite,omitempty"`
+}
+
+type webExportConflictResponse struct {
+	Error             string   `json:"error"`
+	Message           string   `json:"message"`
+	OverwriteRequired bool     `json:"overwrite_required"`
+	Conflicts         []string `json:"conflicts"`
 }
 
 type webExportResponse struct {
@@ -590,8 +598,21 @@ func (s *webServer) handleExport(w http.ResponseWriter, r *http.Request) {
 	manifest, err := writeStaticExport(report, exportOptions{
 		OutputDir:    outputDir,
 		IncludeMedia: request.IncludeMedia,
+		Overwrite:    request.Overwrite,
 	})
 	if err != nil {
+		var conflictErr exportConflictError
+		if errors.As(err, &conflictErr) {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusConflict)
+			writeJSON(w, webExportConflictResponse{
+				Error:             "export targets already exist",
+				Message:           "Export target files already exist. Confirm overwrite to replace them.",
+				OverwriteRequired: true,
+				Conflicts:         conflictErr.Paths,
+			})
+			return
+		}
 		http.Error(w, "export failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}

@@ -2,6 +2,7 @@ package media
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,5 +101,44 @@ func TestWriteStaticExportIncludesFolderAndTagViews(t *testing.T) {
 	}
 	if len(files) != 1 || files[0].MediaType != mediaTypeVideo {
 		t.Fatalf("unexpected files json: %#v", files)
+	}
+}
+
+func TestWriteStaticExportRequiresOverwriteForExistingFiles(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "photo.jpg")
+	if err := os.WriteFile(source, []byte("image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report := Report{
+		Service: ServiceInfo{Name: serviceName, CLI: cliName, Version: version},
+		Items: []Item{{
+			SourcePath:       source,
+			MediaType:        mediaTypeImage,
+			OriginalFileName: "photo.jpg",
+			Extension:        ".jpg",
+			Tags:             []string{"image"},
+			FinalFileName:    "photo.jpg",
+		}},
+	}
+	refreshReportDerived(&report, len(report.Items))
+
+	outputDir := filepath.Join(dir, "export")
+	if _, err := writeStaticExport(report, exportOptions{OutputDir: outputDir, IncludeMedia: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeStaticExport(report, exportOptions{OutputDir: outputDir, IncludeMedia: true}); err == nil {
+		t.Fatal("expected conflict for existing export files")
+	} else {
+		var conflict exportConflictError
+		if !errors.As(err, &conflict) {
+			t.Fatalf("expected exportConflictError, got %T: %v", err, err)
+		}
+		if len(conflict.Paths) == 0 {
+			t.Fatal("expected conflict paths")
+		}
+	}
+	if _, err := writeStaticExport(report, exportOptions{OutputDir: outputDir, IncludeMedia: true, Overwrite: true}); err != nil {
+		t.Fatalf("expected overwrite export to succeed: %v", err)
 	}
 }

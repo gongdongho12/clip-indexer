@@ -153,7 +153,7 @@ go run ./cmd/clip-indexer export \
 - `files.json`: export 파일 목록
 - `manifest.json`: export 생성 정보
 
-웹 UI에서도 상단 `Export HTML` 버튼으로 같은 정적 리포트를 만들 수 있습니다. 버튼을 누르면 export 폴더 경로를 입력할 수 있고, 비워두면 `tmp/clip-atlas-export/<timestamp>` 아래에 생성합니다. 이어서 미디어 파일을 export 폴더로 복사할지 선택하고, 완료 후 로그에 `index.html` 경로가 표시됩니다.
+웹 UI에서도 상단 `Export HTML` 버튼으로 같은 정적 리포트를 만들 수 있습니다. 버튼을 누르면 export 폴더 경로를 입력할 수 있고, 비워두면 `tmp/clip-atlas-export/<timestamp>` 아래에 생성합니다. 이어서 미디어 파일을 export 폴더로 복사할지 선택하고, 완료 후 로그에 `index.html` 경로가 표시됩니다. 같은 위치에 기존 export 파일이 있으면 덮어쓰기 확인 후 진행합니다.
 
 정적 export는 서버 없이 열리므로 Finder/Explorer에서 원본 파일을 reveal 할 수는 없습니다. 대신 `--include-media` 또는 웹 UI의 media copy 옵션으로 만든 export에는 복사된 파일을 여는 `Open` 링크와 원본 경로를 복사하는 `Copy path` 버튼이 포함됩니다.
 
@@ -175,6 +175,7 @@ go run ./cmd/clip-indexer export \
 --vision-prompt-file         vision 분석용 system prompt 파일
 --audio-max-seconds          오디오 샘플 길이
 --audio-max-items            audio 분석 최대 파일 수, 0이면 전체
+--overwrite                  기존 export 파일을 확인 없이 덮어쓰기
 --llm-base-url               OpenAI 호환 API base URL
 --llm-api-key                LLM API 키
 --llm-model                  LLM 모델명

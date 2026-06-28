@@ -24,13 +24,17 @@ var (
 )
 
 func Run(args []string, stdout, stderr io.Writer) error {
+	return RunWithInput(args, os.Stdin, stdout, stderr)
+}
+
+func RunWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	envWarnings := loadEnvFiles(".env.local", ".env")
 	if len(args) > 0 {
 		switch args[0] {
 		case "dev":
 			return runDev(args[1:], stdout, stderr)
 		case "export":
-			return runExport(args[1:], stdout, stderr, envWarnings)
+			return runExport(args[1:], stdin, stdout, stderr, envWarnings)
 		case "serve":
 			return runServe(args[1:], stdout, stderr, envWarnings)
 		case "review":
