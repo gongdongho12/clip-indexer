@@ -1825,9 +1825,10 @@
       return (state.folderPlan?.assignments || []).find((assignment) => assignment.source_path === item.source_path);
     }
 
-    async function loadReport() {
+    async function loadReport(options = {}) {
       const response = await fetch("/api/report");
-      state.report = await response.json();
+      const report = await readJSONResponse(response);
+      state.report = report;
       if (state.report.options?.analysis_language) {
         state.analysisLanguage = state.report.options.analysis_language;
         $("analysisLanguage").value = state.analysisLanguage;
@@ -1836,11 +1837,32 @@
       state.edits.clear();
       state.folderPlan = null;
       await loadUndoStatus(false);
-      if (!state.report.items?.some((item) => item.source_path === state.activePath)) {
-        state.activePath = state.report.items?.[0]?.source_path || "";
-      }
+      const preferredPath = options.nextActivePath || state.activePath;
+      state.activePath = state.report.items?.some((item) => item.source_path === preferredPath)
+        ? preferredPath
+        : state.report.items?.[0]?.source_path || "";
       render();
-      log(`Loaded ${state.report.summary.files_indexed} files`, "ok");
+      if (!options.silent) {
+        log(`Loaded ${state.report.summary.files_indexed} files`, "ok");
+      }
+    }
+
+    function firstResultTargetPath(payload) {
+      for (const result of payload.results || []) {
+        if (result.status === "applied" && result.target_path) {
+          return result.target_path;
+        }
+      }
+      return "";
+    }
+
+    async function refreshReportAfterMutation(nextActivePath = "") {
+      try {
+        await loadReport({ silent: true, nextActivePath });
+        log("Refreshed file list from disk", "ok");
+      } catch (error) {
+        log(`Refresh failed: ${error.message}`, "warn");
+      }
     }
 
     async function loadAnalysisStatus() {
@@ -2468,12 +2490,14 @@
         if (!response.ok) {
           throw new Error(payload.error || response.statusText);
         }
-        applyReportPayload(payload, { clearUndo: true });
+        const nextActivePath = firstResultTargetPath(payload) || state.activePath;
+        applyReportPayload(payload, { clearUndo: true, nextActivePath });
         render();
         const applied = payload.results.filter((result) => result.status === "applied").length;
         const failed = payload.results.filter((result) => result.status === "failed").length;
         const moved = payload.results.filter((result) => result.moved).length;
         log(`Applied ${applied}; moved ${moved}; failed ${failed}`, failed ? "fail" : "ok");
+        await refreshReportAfterMutation(nextActivePath);
       } catch (error) {
         log(error.message, "fail");
       } finally {
@@ -2612,7 +2636,8 @@
           body: JSON.stringify({ root, source_paths: sourcePaths })
         });
         const payload = await readJSONResponse(response);
-        applyReportPayload(payload);
+        const nextActivePath = firstResultTargetPath(payload) || state.activePath;
+        applyReportPayload(payload, { nextActivePath });
         render();
         const applied = (payload.results || []).filter((result) => result.status === "applied").length;
         const failed = (payload.results || []).filter((result) => result.status === "failed").length;
@@ -2621,6 +2646,7 @@
         if (payload.warnings?.length) {
           log(payload.warnings[0], "warn");
         }
+        await refreshReportAfterMutation(nextActivePath);
       } catch (error) {
         log(error.message, "fail");
       } finally {
@@ -2641,13 +2667,15 @@
       try {
         const response = await fetch("/api/undo-organize", { method: "POST" });
         const payload = await readJSONResponse(response);
-        applyReportPayload(payload);
+        const nextActivePath = firstResultTargetPath(payload) || state.activePath;
+        applyReportPayload(payload, { nextActivePath });
         render();
         const failed = (payload.results || []).filter((result) => result.status === "failed").length;
         log(`Undid organize for ${payload.undone || 0} file(s); failed ${failed}`, failed ? "fail" : "ok");
         if (payload.warnings?.length) {
           log(payload.warnings[0], "warn");
         }
+        await refreshReportAfterMutation(nextActivePath);
       } catch (error) {
         log(error.message, "fail");
       } finally {
@@ -2661,18 +2689,31 @@
         log("No files to export", "warn");
         return;
       }
+      if (state.edits.size > 0) {
+        const continueExport = window.confirm("Export uses saved report data. Unsaved row edits will not be included.\n\nContinue export?");
+        if (!continueExport) {
+          log("Export canceled; apply row edits first if needed", "warn");
+          return;
+        }
+      }
+      const outputDir = window.prompt("Export output folder path. Leave empty for tmp/clip-atlas-export/<timestamp>.", "");
+      if (outputDir === null) {
+        return;
+      }
       const includeMedia = window.confirm("Include source media copies for offline preview?\nOK copies media into the export folder. Cancel exports HTML/JSON only.");
       $("exportHtml").disabled = true;
       try {
+        await loadReport({ silent: true, nextActivePath: state.activePath });
         log(`Exporting static HTML${includeMedia ? " with media copies" : ""}`, "warn");
         const response = await fetch("/api/export", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ include_media: includeMedia })
+          body: JSON.stringify({ include_media: includeMedia, output_dir: outputDir.trim() })
         });
         const payload = await readJSONResponse(response);
         log(`Exported ${payload.files || 0} file(s) to ${payload.output_dir}`, "ok");
         log(`Export HTML: ${payload.html_path}`, "ok");
+        await refreshReportAfterMutation(state.activePath);
       } catch (error) {
         log(error.message, "fail");
       } finally {
@@ -2721,6 +2762,7 @@
         if (payload.warnings?.length) {
           log(payload.warnings[0], "warn");
         }
+        await refreshReportAfterMutation(nextActivePath);
       } catch (error) {
         log(error.message, "fail");
       } finally {
@@ -2771,6 +2813,7 @@
         if (payload.warnings?.length) {
           log(payload.warnings[0], "warn");
         }
+        await refreshReportAfterMutation(nextActivePath);
       } catch (error) {
         log(error.message, "fail");
       } finally {

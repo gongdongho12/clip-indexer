@@ -151,7 +151,7 @@ go run ./cmd/clip-indexer export \
 - `files.json`: export 파일 목록
 - `manifest.json`: export 생성 정보
 
-웹 UI에서도 상단 `Export HTML` 버튼으로 같은 정적 리포트를 만들 수 있습니다. 버튼을 누르면 미디어 파일을 export 폴더로 복사할지 선택하고, 완료 후 로그에 `index.html` 경로가 표시됩니다.
+웹 UI에서도 상단 `Export HTML` 버튼으로 같은 정적 리포트를 만들 수 있습니다. 버튼을 누르면 export 폴더 경로를 입력할 수 있고, 비워두면 `tmp/clip-atlas-export/<timestamp>` 아래에 생성합니다. 이어서 미디어 파일을 export 폴더로 복사할지 선택하고, 완료 후 로그에 `index.html` 경로가 표시됩니다.
 
 주요 옵션:
 
