@@ -227,6 +227,9 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
     tr:hover, tr.active { background: #eef8f7; }
     .name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .path, .tags, .muted { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .actions { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .actions a, .actions button { min-height:30px; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink); font:inherit; font-size:12px; text-decoration:none; cursor:pointer; }
+    .actions a:hover, .actions button:hover { border-color: var(--accent); }
     .side { position: sticky; top: 78px; align-self: start; height: calc(100vh - 78px); display: grid; grid-template-rows: minmax(220px, 38vh) minmax(0, 1fr); border-left: 1px solid var(--line); background: #fff; }
     .preview { display:grid; grid-template-rows:minmax(0, 1fr) auto; min-height:0; background:#101820; color:#eff6f7; }
     .preview video, .preview img { width:100%; height:100%; object-fit:contain; min-height:0; }
@@ -259,7 +262,7 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
     <section class="list">
       <div class="toolbar"><input id="filter" type="search" placeholder="Filter files, tags, folders"><button id="clearFilter" type="button">Clear</button></div>
       <table>
-        <thead><tr><th style="width:30%">File</th><th style="width:12%">Media</th><th style="width:18%">Shot</th><th>Tags</th><th style="width:18%">Final</th></tr></thead>
+        <thead><tr><th style="width:28%">File</th><th style="width:10%">Media</th><th style="width:16%">Shot</th><th>Tags</th><th style="width:16%">Final</th><th style="width:12%">Actions</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </section>
@@ -310,6 +313,17 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
       }
       return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 80);
     }
+    function actionHTML(file) {
+      const open = file.export_path ? "<a href=\"" + esc(file.export_path) + "\" target=\"_blank\" rel=\"noopener\">Open</a>" : "";
+      return "<div class=\"actions\">" + open + "<button type=\"button\" data-copy-path=\"" + esc(file.source_path) + "\">Copy path</button></div>";
+    }
+    async function copyPath(path) {
+      try {
+        await navigator.clipboard.writeText(path);
+      } catch {
+        window.prompt("Copy path", path);
+      }
+    }
     function folderMatches(file) {
       if (!selectedFolder) return true;
       return String(file.source_path || "").startsWith(selectedFolder);
@@ -355,7 +369,7 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
     }
     function renderRows() {
       const rows = filteredFiles();
-      $("rows").innerHTML = rows.map((file) => "<tr data-path=\"" + esc(file.source_path) + "\" class=\"" + (file.source_path === active ? "active" : "") + "\"><td><div class=\"name\">" + esc(base(file.source_path)) + "</div><div class=\"path\">" + esc(file.source_path) + "</div></td><td>" + esc(file.media_type || "-") + "</td><td>" + esc(shot(file.shot_at)) + "</td><td class=\"tags\">" + esc((file.tags || []).join(", ")) + "</td><td>" + esc(file.final_file_name || "") + "</td></tr>").join("");
+      $("rows").innerHTML = rows.map((file) => "<tr data-path=\"" + esc(file.source_path) + "\" class=\"" + (file.source_path === active ? "active" : "") + "\"><td><div class=\"name\">" + esc(base(file.source_path)) + "</div><div class=\"path\">" + esc(file.source_path) + "</div></td><td>" + esc(file.media_type || "-") + "</td><td>" + esc(shot(file.shot_at)) + "</td><td class=\"tags\">" + esc((file.tags || []).join(", ")) + "</td><td>" + esc(file.final_file_name || "") + "</td><td>" + actionHTML(file) + "</td></tr>").join("");
       document.querySelectorAll("tr[data-path]").forEach((row) => row.addEventListener("click", () => { active = row.dataset.path; render(); }));
     }
     function renderDetail() {
@@ -363,11 +377,17 @@ func renderStaticExportHTML(report Report, files []exportFile) string {
       const source = reportItem(active) || {};
       if (!file) { $("preview").innerHTML = "<div class=\"audio-box\">Select a file</div>"; $("detail").innerHTML = ""; return; }
       $("preview").innerHTML = mediaElement(file) + "<div class=\"preview-title\">" + esc(base(file.source_path)) + "</div>";
-      $("detail").innerHTML = "<h2>" + esc(base(file.source_path)) + "</h2><div class=\"grid\"><span>Media</span><strong>" + esc(file.media_type) + "</strong><span>Folder</span><strong>" + esc(file.folder || "-") + "</strong><span>Final</span><strong>" + esc(file.final_file_name || "-") + "</strong><span>Shot</span><strong>" + esc(shot(file.shot_at)) + "</strong><span>Scene</span><strong>" + esc(source.content?.scene_summary || source.content?.notes || "-") + "</strong><span>Audio</span><strong>" + esc(source.content?.audio_summary || source.content?.audio_transcript || "-") + "</strong><span>Location</span><strong>" + esc(source.location?.label || source.content?.location_guess || "-") + "</strong><span>Source</span><strong>" + esc(file.source_path) + "</strong><span>Export</span><strong>" + esc(file.export_path || "-") + "</strong><span>Tags</span><strong>" + esc((file.tags || []).join(", ")) + "</strong></div>";
+      $("detail").innerHTML = "<h2>" + esc(base(file.source_path)) + "</h2>" + actionHTML(file) + "<div class=\"grid\"><span>Media</span><strong>" + esc(file.media_type) + "</strong><span>Folder</span><strong>" + esc(file.folder || "-") + "</strong><span>Final</span><strong>" + esc(file.final_file_name || "-") + "</strong><span>Shot</span><strong>" + esc(shot(file.shot_at)) + "</strong><span>Scene</span><strong>" + esc(source.content?.scene_summary || source.content?.notes || "-") + "</strong><span>Audio</span><strong>" + esc(source.content?.audio_summary || source.content?.audio_transcript || "-") + "</strong><span>Location</span><strong>" + esc(source.location?.label || source.content?.location_guess || "-") + "</strong><span>Source</span><strong>" + esc(file.source_path) + "</strong><span>Export</span><strong>" + esc(file.export_path || "-") + "</strong><span>Tags</span><strong>" + esc((file.tags || []).join(", ")) + "</strong></div>";
     }
     function render() { stats(); renderMaps(); renderRows(); renderDetail(); }
     $("filter").addEventListener("input", renderRows);
     $("clearFilter").addEventListener("click", () => { $("filter").value = ""; selectedFolder = ""; selectedTag = ""; render(); });
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-copy-path]");
+      if (!button) return;
+      event.stopPropagation();
+      copyPath(button.dataset.copyPath || "");
+    });
     render();
   </script>
 </body>

@@ -380,10 +380,17 @@
 
     .file-cell {
       display: grid;
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 8px;
       align-items: center;
       padding-left: calc(var(--file-depth, 0) * 14px);
+    }
+
+    .file-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: flex-end;
     }
 
     .folder-cell {
@@ -606,6 +613,13 @@
 
     .preview-action {
       display: none;
+    }
+
+    .reveal-action {
+      min-height: 30px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
     }
 
     .modal {
@@ -1997,7 +2011,10 @@
               <div class="file-name" title="${escapeAttr(item.source_path)}">${escapeHtml(baseName(item.source_path))}</div>
               <div class="path">${escapeHtml(dirName(item.source_path))}</div>
             </div>
-            <button class="preview-action" data-action="preview">Preview</button>
+            <div class="file-actions">
+              <button class="preview-action" data-action="preview" type="button">Preview</button>
+              <button class="reveal-action" data-action="reveal" type="button" title="Reveal in Finder or Explorer">Reveal</button>
+            </div>
           </div>
         </td>
         <td>${escapeHtml(formatDate(item.shot_at))}</td>
@@ -2011,6 +2028,7 @@
       const tagsInput = tr.querySelectorAll("input[type=text]")[0];
       const nameInput = tr.querySelectorAll("input[type=text]")[1];
       const previewButton = tr.querySelector("button[data-action=preview]");
+      const revealButton = tr.querySelector("button[data-action=reveal]");
 
       checkbox.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -2031,6 +2049,12 @@
         state.activePath = key;
         render();
         openPreview(item);
+      });
+      revealButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        state.activePath = key;
+        render();
+        revealFile(key);
       });
       tr.addEventListener("click", () => {
         state.activePath = key;

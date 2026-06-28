@@ -47,7 +47,7 @@ func TestWriteStaticExportIncludesFolderAndTagViews(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := string(data)
-	for _, expected := range []string{"folderMap", "tagMap", "Street photo"} {
+	for _, expected := range []string{"folderMap", "tagMap", "Street photo", "Copy path", "data-copy-path", ">Open</a>"} {
 		if !strings.Contains(html, expected) {
 			t.Fatalf("expected export HTML to contain %q", expected)
 		}

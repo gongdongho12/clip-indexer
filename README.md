@@ -153,6 +153,8 @@ go run ./cmd/clip-indexer export \
 
 웹 UI에서도 상단 `Export HTML` 버튼으로 같은 정적 리포트를 만들 수 있습니다. 버튼을 누르면 export 폴더 경로를 입력할 수 있고, 비워두면 `tmp/clip-atlas-export/<timestamp>` 아래에 생성합니다. 이어서 미디어 파일을 export 폴더로 복사할지 선택하고, 완료 후 로그에 `index.html` 경로가 표시됩니다.
 
+정적 export는 서버 없이 열리므로 Finder/Explorer에서 원본 파일을 reveal 할 수는 없습니다. 대신 `--include-media` 또는 웹 UI의 media copy 옵션으로 만든 export에는 복사된 파일을 여는 `Open` 링크와 원본 경로를 복사하는 `Copy path` 버튼이 포함됩니다.
+
 주요 옵션:
 
 ```text
@@ -234,6 +236,7 @@ go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MED
 - 추천 그룹 또는 계획된 폴더
 - 편집 가능한 태그
 - 편집 가능한 최종 파일명
+- Finder/Explorer에서 원본을 바로 선택하는 `Reveal` 버튼
 
 오른쪽 패널에서 볼 수 있는 것:
 
