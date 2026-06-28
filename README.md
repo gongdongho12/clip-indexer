@@ -222,13 +222,9 @@ go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MED
 
 ### 화면 예시
 
-데스크톱에서는 파일 목록, 미리보기, 메타데이터 패널을 한 화면에서 같이 확인할 수 있습니다.
+현재 웹 UI는 데스크톱 브라우저 기준입니다. 파일 목록, 미리보기, 메타데이터 패널, 분석/정리/Export 작업 로그를 한 화면에서 같이 확인할 수 있습니다.
 
 ![Clip Atlas desktop UI](docs/screenshots/clip-atlas-desktop.png)
-
-모바일에서는 상단 액션과 목록/적용 컨트롤이 세로로 정리됩니다.
-
-![Clip Atlas mobile UI](docs/screenshots/clip-atlas-mobile.png)
 
 왼쪽 목록에서 볼 수 있는 것:
 
@@ -241,8 +237,7 @@ go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MED
 
 오른쪽 패널에서 볼 수 있는 것:
 
-- PC에서는 고정된 영상 preview/detail 패널
-- 모바일에서는 preview modal
+- 고정된 영상 preview/detail 패널
 - 선택한 클립 메타데이터
 - 분석 진행 상태
 - apply 컨트롤
@@ -458,7 +453,6 @@ go run ./cmd/clip-indexer review \
 
 - `Organize files` 실행 전에 dry-run preview를 보여주고, 파일 이동은 별도 확인 단계에서만 실행하기
 - map JSON을 다시 불러와 이전 정리 계획과 현재 폴더 상태를 비교하기
-- 모바일에서 긴 파일명/경로를 더 쉽게 훑을 수 있도록 row detail drawer 추가하기
 - folder plan 결과를 태그 맵 화면과 연결해 폴더별 클립 분포를 시각화하기
 
 Apply 동작:
