@@ -2,6 +2,23 @@
 
 All notable changes to **Clip Atlas** are documented in this file.
 
+## 2026-06-29
+
+Built from `394a9afb7da9`. **6** commit(s) processed.
+Changes since `v0.1.5`.
+
+### Features
+- confirm overwriting static exports (`c4562664e3`)
+- show analysis details in static export (`28ef8ca8f6`)
+- reveal files from web lists (`d8bcf6da80`)
+
+### Fixes
+- refresh web report after file changes (`97fcc9d6de`)
+
+### Documentation
+- remove mobile UI screenshot (`9e4726d043`)
+- update CHANGELOG.md [skip ci] (`fbf29478f9`)
+
 ## 2026-06-28
 
 Built from `dd9b2de4c397`. **2** commit(s) processed.
