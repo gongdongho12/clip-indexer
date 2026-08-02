@@ -2,6 +2,41 @@
 
 All notable changes to **Clip Atlas** are documented in this file.
 
+## 2026-08-02
+
+Built from `05a10a5bb468`. **18** commit(s) processed.
+Changes since `v0.1.5`.
+
+### Features
+- confirm overwriting static exports (`c4562664e3`)
+- show analysis details in static export (`28ef8ca8f6`)
+- reveal files from web lists (`d8bcf6da80`)
+- export static reports from web UI (`992c2739d2`)
+
+### Fixes
+- refresh web report after file changes (`97fcc9d6de`)
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`fb8ad15747`)
+- remove mobile UI screenshot (`9e4726d043`)
+- update CHANGELOG.md [skip ci] (`fbf29478f9`)
+- finalize codex plugin packaging skill (`dd9b2de4c3`)
+- update CHANGELOG.md [skip ci] (`43c608a554`)
+- update CHANGELOG.md [skip ci] (`0e89b157da`)
+- add codex plugin packaging skill (`e37bc4bffb`)
+- update CHANGELOG.md [skip ci] (`4a0b61fd0c`)
+- update CHANGELOG.md [skip ci] (`6c456015cc`)
+- update CHANGELOG.md [skip ci] (`822ce8f4e6`)
+
+### Tests
+- add mock media fixtures (`6d746a3889`)
+
+### Build and CI
+- cache go modules with go.mod (`2367ce6b52`)
+
+### Other changes
+- Improve web workflow panel layout (`05a10a5bb4`)
+
 ## 2026-06-29
 
 Built from `394a9afb7da9`. **6** commit(s) processed.
