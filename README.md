@@ -196,21 +196,27 @@ go run ./cmd/clip-indexer export \
 
 API 키는 `.env.local`에 넣으면 됩니다. 이 파일은 git에 올라가지 않습니다.
 
-DeepSeek를 기본 provider로, Gemini를 fallback으로 쓰는 예시:
+Gemini만 사용하는 기본 구성:
+
+```bash
+GEMINI_API_KEY=...
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+GEMINI_MODEL=gemini-3.6-flash
+CLIP_INDEXER_VISION_INPUT_MODE=auto
+```
+
+이 구성만으로 텍스트, 이미지/영상 프레임, 오디오 분석이 모두 동작합니다. 이미지/영상은 추출한 원본 프레임을 `image_url`, 오디오는 WAV 샘플을 `input_audio`로 Gemini에 직접 전달합니다.
+
+텍스트 비용을 줄이기 위해 DeepSeek를 선택적으로 추가할 수 있습니다.
 
 ```bash
 DEEPSEEK_API_KEY=...
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
 LLM_PROVIDER_MODE=fallback
-CLIP_INDEXER_VISION_INPUT_MODE=auto
-
-LLM_API_KEY=...
-LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-LLM_MODEL=gemini-3.6-flash
 ```
 
-`DEEPSEEK_API_KEY`가 있으면 DeepSeek가 텍스트 처리의 primary LLM이 됩니다. 위 구성에서 텍스트 요청은 DeepSeek를 먼저 호출하고 실패하면 Gemini로 전환합니다. 이미지/영상은 이미지 입력을 지원하는 Gemini를 바로 선택해 추출한 원본 프레임을 `image_url`로 전달하고, 오디오는 WAV 샘플을 Gemini의 `input_audio`로 직접 전달합니다. 따라서 시각 분석은 Apple Vision 분류값이 아니라 Gemini가 실제 프레임 픽셀을 보고 처리합니다.
+`DEEPSEEK_API_KEY`가 추가되면 텍스트 요청만 DeepSeek를 먼저 호출하고 실패하면 Gemini로 전환합니다. 이미지/영상과 오디오는 계속 Gemini가 직접 처리합니다. `LLM_PROVIDER_MODE`를 생략해도 Gemini와 DeepSeek가 함께 설정되어 있으면 텍스트 fallback 모드가 자동으로 선택됩니다.
 
 `CLIP_INDEXER_VISION_INPUT_MODE`는 `auto`, `native`, `local`을 지원합니다. `auto`는 설정된 provider 중 이미지 입력이 가능한 provider를 선택하며, 현재 예시에서는 Gemini가 선택됩니다. `native`는 OpenAI 호환 `image_url` 메시지를 강제로 사용하고, `local`만 Apple Vision 전처리를 강제합니다. `LLM_PROVIDER_MODE=direct`는 텍스트 요청에서 기본 provider만 호출하고, `fallback`은 실패 시 기존 `LLM_*` provider로 재시도합니다. 명시적인 fallback은 `LLM_FALLBACK_API_KEY`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_MODEL`로 지정할 수 있습니다.
 

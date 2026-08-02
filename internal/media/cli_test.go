@@ -28,9 +28,11 @@ func TestNormalizeAnalysisLanguage(t *testing.T) {
 func TestDefaultConfigPromotesDeepSeekAndKeepsGenericLLMAsFallback(t *testing.T) {
 	for _, key := range []string{
 		"DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL",
+		"GEMINI_API_KEY", "GEMINI_BASE_URL", "GEMINI_MODEL",
 		"LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL",
 		"OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL",
 		"LLM_FALLBACK_API_KEY", "LLM_FALLBACK_BASE_URL", "LLM_FALLBACK_MODEL",
+		"LLM_PROVIDER_MODE",
 	} {
 		t.Setenv(key, "")
 	}
@@ -45,6 +47,37 @@ func TestDefaultConfigPromotesDeepSeekAndKeepsGenericLLMAsFallback(t *testing.T)
 	}
 	if cfg.LLMFallback.BaseURL != "https://generativelanguage.googleapis.com/v1beta/openai/" || cfg.LLMFallback.Model != "gemini-test" {
 		t.Fatalf("expected Gemini fallback provider, got %#v", cfg.LLMFallback)
+	}
+	if cfg.LLMProviderMode != "fallback" {
+		t.Fatalf("expected automatic text failover, got %q", cfg.LLMProviderMode)
+	}
+}
+
+func TestDefaultConfigUsesGeminiWithoutDeepSeek(t *testing.T) {
+	for _, key := range []string{
+		"DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL",
+		"GEMINI_API_KEY", "GEMINI_BASE_URL", "GEMINI_MODEL",
+		"LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL",
+		"OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL",
+		"LLM_FALLBACK_API_KEY", "LLM_FALLBACK_BASE_URL", "LLM_FALLBACK_MODEL",
+		"LLM_PROVIDER_MODE",
+	} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("GEMINI_API_KEY", "gemini-key")
+
+	cfg := defaultConfig()
+	if cfg.LLMBaseURL != "https://generativelanguage.googleapis.com/v1beta/openai/" || cfg.LLMModel != "gemini-3.6-flash" {
+		t.Fatalf("expected standalone Gemini provider, got %s %s", cfg.LLMBaseURL, cfg.LLMModel)
+	}
+	if cfg.LLMProviderMode != "direct" || llmProviderConfigured(cfg.LLMFallback) {
+		t.Fatalf("standalone Gemini should not require fallback: %#v", cfg)
+	}
+	if routed := configForVisionAnalysis(cfg); routed.LLMModel != "gemini-3.6-flash" {
+		t.Fatalf("vision should use standalone Gemini, got %s", routed.LLMModel)
+	}
+	if routed, supported := configForAudioAnalysis(cfg); !supported || routed.LLMModel != "gemini-3.6-flash" {
+		t.Fatalf("audio should use standalone Gemini: supported=%v model=%s", supported, routed.LLMModel)
 	}
 }
 

@@ -344,11 +344,19 @@ func defaultConfig() Config {
 		APIKey:  envOrAny("", "LLM_API_KEY", "OPENAI_API_KEY"),
 		Model:   envOrAny("", "LLM_MODEL", "OPENAI_MODEL"),
 	}
+	if geminiKey := envOr("GEMINI_API_KEY", ""); primary.APIKey == "" && geminiKey != "" {
+		primary = LLMProviderConfig{
+			BaseURL: envOr("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+			APIKey:  geminiKey,
+			Model:   envOr("GEMINI_MODEL", "gemini-3.6-flash"),
+		}
+	}
 	fallback := LLMProviderConfig{
 		BaseURL: envOr("LLM_FALLBACK_BASE_URL", ""),
 		APIKey:  envOr("LLM_FALLBACK_API_KEY", ""),
 		Model:   envOr("LLM_FALLBACK_MODEL", ""),
 	}
+	deepSeekConfigured := false
 	if deepSeekKey := envOr("DEEPSEEK_API_KEY", ""); deepSeekKey != "" {
 		if fallback.Model == "" {
 			fallback = primary
@@ -358,6 +366,11 @@ func defaultConfig() Config {
 			APIKey:  deepSeekKey,
 			Model:   envOr("DEEPSEEK_MODEL", "deepseek-v4-flash"),
 		}
+		deepSeekConfigured = true
+	}
+	providerModeDefault := "direct"
+	if deepSeekConfigured && llmProviderConfigured(fallback) {
+		providerModeDefault = "fallback"
 	}
 
 	return Config{
@@ -382,7 +395,7 @@ func defaultConfig() Config {
 		LLMAPIKey:                   primary.APIKey,
 		LLMModel:                    primary.Model,
 		LLMFallback:                 fallback,
-		LLMProviderMode:             envOr("LLM_PROVIDER_MODE", "direct"),
+		LLMProviderMode:             envOr("LLM_PROVIDER_MODE", providerModeDefault),
 		LLMTimeoutSeconds:           30,
 	}
 }
