@@ -540,7 +540,7 @@
 
     .right {
       display: grid;
-      grid-template-rows: auto auto auto minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr) auto auto;
       gap: 0;
       background: #ffffff;
       position: fixed;
@@ -955,13 +955,22 @@
     }
 
     .detail {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      max-height: 230px;
+      min-height: 0;
       padding: 10px 14px;
       border-bottom: 1px solid var(--line);
       overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .detail-content {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .detail-content[hidden] {
+      display: none;
     }
 
     .detail h2 {
@@ -1072,10 +1081,8 @@
       flex-wrap: wrap;
       flex: 0 0 auto;
       gap: 5px;
-      max-height: 52px;
       min-height: 24px;
-      overflow-x: hidden;
-      overflow-y: auto;
+      overflow: visible;
     }
 
     .analysis-status {
@@ -1124,8 +1131,7 @@
 
     .ops {
       min-height: 0;
-      overflow-y: auto;
-      overscroll-behavior: contain;
+      overflow: hidden;
       padding: 0;
       border-bottom: 1px solid var(--line);
       display: grid;
@@ -1135,7 +1141,7 @@
 
     .ops-header {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) auto auto;
       gap: 8px;
       align-items: center;
       padding: 12px 14px;
@@ -1156,11 +1162,52 @@
       white-space: nowrap;
     }
 
+    .shutdown-action {
+      min-height: 28px;
+      padding: 2px 8px;
+      font-size: 12px;
+    }
+
+    .workflow-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      padding: 8px 14px 0;
+      background: #ffffff;
+    }
+
+    .workflow-tab {
+      min-height: 30px;
+      padding: 4px 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .workflow-tab[aria-selected="true"] {
+      border-color: #b7d3d8;
+      background: #e9f3f5;
+      color: var(--accent-strong);
+    }
+
+    .workflow-panel[hidden] {
+      display: none;
+    }
+
     .ops-section {
       display: grid;
       gap: 8px;
       padding: 10px 14px;
       border-bottom: 1px solid var(--line);
+    }
+
+    .workflow-panel .ops-section-title {
+      display: none;
+    }
+
+    #workflowOrganize .ops-switches,
+    #workflowWrite .ops-switches {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .ops-section-title {
@@ -1197,19 +1244,15 @@
     }
 
     .final-actions {
-      position: sticky;
-      bottom: 0;
-      z-index: 1;
-      padding: 10px 14px;
+      padding: 8px 14px;
       border-top: 1px solid var(--line);
       border-bottom: 0;
       background: #ffffff;
-      box-shadow: 0 -8px 18px rgba(23, 32, 38, 0.06);
     }
 
-    .ops > .danger {
-      margin: 12px 14px 14px;
-      width: 100%;
+    .final-actions .primary,
+    .final-actions .danger {
+      grid-column: auto;
     }
 
     .folder-actions {
@@ -1223,9 +1266,8 @@
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      max-height: 126px;
-      overflow-x: hidden;
-      overflow-y: auto;
+      max-height: 54px;
+      overflow: hidden;
       min-width: 0;
     }
 
@@ -1258,13 +1300,9 @@
     }
 
     .json-panel {
-      flex: 1 1 auto;
       min-height: 0;
-      max-height: 36vh;
-      overflow-x: hidden;
-      overflow-y: auto;
+      overflow: visible;
       background: #fbfcfc;
-      border-bottom: 1px solid var(--line);
     }
 
     pre {
@@ -1278,20 +1316,29 @@
     }
 
     .log {
-      min-height: 44px;
-      max-height: 96px;
-      overflow-x: hidden;
-      overflow-y: auto;
-      padding: 10px 14px;
+      min-height: 32px;
+      max-height: 32px;
+      overflow: hidden;
+      padding: 7px 14px;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12px;
       background: #fbfcfc;
-      border: 1px solid var(--line);
-      border-radius: 7px;
+      border-top: 1px solid var(--line);
     }
 
     .log div {
+      overflow: hidden;
       overflow-wrap: anywhere;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .log div:not(:first-child) {
+      display: none;
+    }
+
+    .log:empty {
+      display: none;
     }
 
     .ok {
@@ -1308,7 +1355,7 @@
 
     @media (max-width: 980px) {
       :root {
-        --mobile-panel-height: min(48vh, 390px);
+        --mobile-panel-height: min(56vh, 440px);
       }
 
       .topbar {
@@ -1438,13 +1485,12 @@
         left: 0;
         right: 0;
         bottom: 0;
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto auto;
         width: auto;
         height: auto;
         max-height: var(--mobile-panel-height);
-        overflow-x: hidden;
-        overflow-y: auto;
+        overflow: hidden;
         border-left: 0;
         z-index: 8;
         box-shadow: 0 -10px 26px rgba(23, 32, 38, 0.14);
@@ -1467,6 +1513,7 @@
       .detail {
         padding: 10px 12px;
         gap: 8px;
+        max-height: none;
       }
 
       .detail h2 {
@@ -1514,15 +1561,19 @@
       }
 
       .ops {
-        gap: 8px;
-        padding-bottom: calc(10px + env(safe-area-inset-bottom));
+        gap: 0;
+        padding-bottom: env(safe-area-inset-bottom);
         border-bottom: 0;
       }
 
       .ops-header,
       .ops-section,
       .final-actions {
-        padding: 10px 12px;
+        padding: 8px 12px;
+      }
+
+      .workflow-tabs {
+        padding: 7px 12px 0;
       }
 
       .ops .switch {
@@ -1684,21 +1735,32 @@
 
       <aside class="right">
         <div class="preview" id="preview"></div>
-        <section class="detail" id="detail"></section>
+        <section class="detail" id="detail">
+          <div class="detail-content" id="detailContent"></div>
+          <section class="json-panel" id="jsonPanel" hidden>
+            <pre id="json"></pre>
+          </section>
+        </section>
         <section class="analysis-status" id="analysisStatus" hidden></section>
         <section class="ops">
           <div class="ops-header">
             <h2>Workflow</h2>
             <span class="selection-summary" id="selectionSummary">0 selected</span>
+            <button class="danger shutdown-action" id="shutdown" type="button">Stop</button>
           </div>
-          <div class="ops-section">
+          <div class="workflow-tabs" role="tablist" aria-label="Workflow steps">
+            <button class="workflow-tab" id="workflowTabAnalyze" data-workflow-tab="analyze" type="button" role="tab" aria-controls="workflowAnalyze" aria-selected="false">Analyze</button>
+            <button class="workflow-tab" id="workflowTabOrganize" data-workflow-tab="organize" type="button" role="tab" aria-controls="workflowOrganize" aria-selected="true">Organize</button>
+            <button class="workflow-tab" id="workflowTabWrite" data-workflow-tab="write" type="button" role="tab" aria-controls="workflowWrite" aria-selected="false">Write</button>
+          </div>
+          <div class="ops-section workflow-panel" id="workflowAnalyze" data-workflow-panel="analyze" role="tabpanel" aria-labelledby="workflowTabAnalyze" hidden>
             <div class="ops-section-title">Analyze</div>
             <div class="ops-actions">
               <button id="analyze">Analyze selected</button>
               <button id="analyzeAll">Analyze all</button>
             </div>
           </div>
-          <div class="ops-section">
+          <div class="ops-section workflow-panel" id="workflowOrganize" data-workflow-panel="organize" role="tabpanel" aria-labelledby="workflowTabOrganize">
             <div class="ops-section-title">Organize</div>
             <div class="ops-switches">
               <label class="switch"><input id="renameFiles" type="checkbox"> Rename selected files</label>
@@ -1712,7 +1774,7 @@
             <div class="folder-list" id="folderList" hidden></div>
             <div class="folder-plan" id="folderPlan" hidden></div>
           </div>
-          <div class="ops-section">
+          <div class="ops-section workflow-panel" id="workflowWrite" data-workflow-panel="write" role="tabpanel" aria-labelledby="workflowTabWrite" hidden>
             <div class="ops-section-title">Write</div>
             <div class="ops-switches">
               <label class="switch"><input id="writeSidecar" type="checkbox"> Write sidecar tag JSON</label>
@@ -1724,10 +1786,6 @@
             <button class="primary" id="apply">Apply selected</button>
           </div>
           <div class="log" id="log"></div>
-          <button class="danger" id="shutdown">Stop server</button>
-        </section>
-        <section class="json-panel" id="jsonPanel" hidden>
-          <pre id="json"></pre>
         </section>
       </aside>
     </main>
@@ -1776,7 +1834,8 @@
       folders: [],
       folderPlan: null,
       undo: null,
-      tagMapOpen: false
+      tagMapOpen: false,
+      workflowTab: "organize"
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1788,6 +1847,18 @@
     function setButtonsDisabled(ids, disabled) {
       for (const id of ids) {
         $(id).disabled = disabled;
+      }
+    }
+
+    function setWorkflowTab(tabName) {
+      state.workflowTab = tabName;
+      for (const tab of document.querySelectorAll("[data-workflow-tab]")) {
+        const selected = tab.dataset.workflowTab === tabName;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      }
+      for (const panel of document.querySelectorAll("[data-workflow-panel]")) {
+        panel.hidden = panel.dataset.workflowPanel !== tabName;
       }
     }
 
@@ -2309,7 +2380,7 @@
     function renderDetail() {
       const item = (state.report?.items || []).find((candidate) => candidate.source_path === state.activePath);
       const preview = $("preview");
-      const detail = $("detail");
+      const detail = $("detailContent");
       if (!item) {
         preview.innerHTML = `<div class="empty-preview">No file selected</div>`;
         detail.innerHTML = "";
@@ -2346,6 +2417,7 @@
     }
 
     function renderJson() {
+      $("detailContent").hidden = state.showJson;
       $("jsonPanel").hidden = !state.showJson;
       if (!state.showJson || !state.report) return;
       const cloned = structuredClone(state.report);
@@ -2396,10 +2468,12 @@
         return;
       }
       panel.hidden = false;
-      panel.innerHTML = state.folders
-        .slice(0, 40)
+      const visibleFolders = state.folders.slice(0, 5);
+      panel.innerHTML = visibleFolders
         .map((folder) => `<span class="folder-chip" title="${escapeAttr(folder.path)}">${escapeHtml(folder.relative_path)}</span>`)
-        .join("");
+        .join("") + (state.folders.length > visibleFolders.length
+          ? `<span class="folder-chip" title="${escapeAttr(`${state.folders.length} folders loaded`)}">+${state.folders.length - visibleFolders.length}</span>`
+          : "");
     }
 
     function renderFolderPlan() {
@@ -2411,14 +2485,17 @@
         return;
       }
       panel.hidden = false;
-      panel.innerHTML = folders
+      const visibleFolders = folders.slice(0, 5);
+      panel.innerHTML = visibleFolders
         .map((folder) => {
           const count = folder.count ? ` ${folder.count}` : "";
           const className = folder.existing ? "folder-chip" : "folder-chip new";
           const title = [folder.reason, folder.existing ? "existing" : "new"].filter(Boolean).join(" / ");
           return `<span class="${className}" title="${escapeAttr(title)}">${escapeHtml(folder.folder)}${escapeHtml(count)}</span>`;
         })
-        .join("");
+        .join("") + (folders.length > visibleFolders.length
+          ? `<span class="folder-chip" title="${escapeAttr(`${folders.length} planned folders`)}">+${folders.length - visibleFolders.length}</span>`
+          : "");
     }
 
     function tagMapTagsFor(item) {
@@ -3370,6 +3447,9 @@
     }
 
     $("filter").addEventListener("input", renderRows);
+    for (const tab of document.querySelectorAll("[data-workflow-tab]")) {
+      tab.addEventListener("click", () => setWorkflowTab(tab.dataset.workflowTab));
+    }
     $("selectAll").addEventListener("change", () => {
       const checked = $("selectAll").checked;
       for (const item of filteredItems()) {
@@ -3435,6 +3515,7 @@
       }
     });
 
+    setWorkflowTab(state.workflowTab);
     syncLayoutMetrics();
     syncHashRoute();
     startHeartbeat();
