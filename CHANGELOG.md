@@ -4,6 +4,17 @@ All notable changes to **Clip Atlas** are documented in this file.
 
 ## 2026-08-02
 
+Built from `c49307a24de1`. **2** commit(s) processed.
+Changes since `v0.1.5`.
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`c65d3a26fa`)
+
+### Other changes
+- Fix workflow panel scroll ownership (`c49307a24d`)
+
+## 2026-08-02
+
 Built from `05a10a5bb468`. **18** commit(s) processed.
 Changes since `v0.1.5`.
 
