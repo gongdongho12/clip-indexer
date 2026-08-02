@@ -1537,6 +1537,15 @@ func moveCompanionFile(oldSourcePath, newSourcePath, suffix string) error {
 	return os.Rename(oldPath, newPath)
 }
 
+func moveAnalysisCacheFiles(oldSourcePath, newSourcePath string) error {
+	for _, suffix := range []string{analysisCacheSuffix, analysisCacheSuffix + ".real"} {
+		if err := moveCompanionFile(oldSourcePath, newSourcePath, suffix); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *webServer) handlePing(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1630,9 +1639,10 @@ func (s *webServer) applyOne(operation applyOperation) applyResult {
 			result.Error = "move failed: " + err.Error()
 			return result
 		}
-		_ = moveCompanionFile(currentPath, targetPath, analysisCacheSuffix)
+		_ = moveAnalysisCacheFiles(currentPath, targetPath)
 		_ = moveCompanionFile(currentPath, targetPath, ".clip-tags.json")
 		candidate.SourcePath = targetPath
+		candidate.OriginalFileName = filepath.Base(targetPath)
 		result.Renamed = filepath.Base(currentPath) != filepath.Base(targetPath)
 		result.Moved = filepath.Dir(currentPath) != filepath.Dir(targetPath)
 	}

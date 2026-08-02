@@ -142,7 +142,7 @@ func (s *webServer) undoOrganizeOne(entry organizeUndoItem) undoOrganizeResult {
 		result.Error = "move back failed: " + err.Error()
 		return result
 	}
-	_ = moveCompanionFile(entry.AfterPath, entry.Before.SourcePath, analysisCacheSuffix)
+	_ = moveAnalysisCacheFiles(entry.AfterPath, entry.Before.SourcePath)
 	_ = moveCompanionFile(entry.AfterPath, entry.Before.SourcePath, ".clip-tags.json")
 
 	before := cloneItem(entry.Before)

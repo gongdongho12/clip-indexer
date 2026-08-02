@@ -66,6 +66,71 @@ func TestApplyOneRenamesAndWritesSidecar(t *testing.T) {
 	}
 }
 
+func TestApplyOneRenamesAnalysisCacheAndRefreshesFileIdentity(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "DJI_0001.MP4")
+	if err := os.WriteFile(source, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	item := Item{
+		SourcePath:       source,
+		OriginalFileName: filepath.Base(source),
+		Extension:        ".mp4",
+		ShotAt:           "2026-06-03T18:47:57+09:00",
+		DurationSeconds:  10,
+		Tags:             []string{"video", "dji"},
+		FinalFileName:    "DJI_0001.MP4",
+		Content:          &ContentInfo{SceneSummary: "A coastline seen from a drone."},
+	}
+	if err := saveAnalysisCache(item); err != nil {
+		t.Fatal(err)
+	}
+
+	server := &webServer{report: Report{Items: []Item{item}}}
+	result := server.applyOne(applyOperation{
+		SourcePath: source,
+		FinalName:  "coastline.mp4",
+		Tags:       item.Tags,
+		Rename:     true,
+	})
+	if result.Status != "applied" {
+		t.Fatalf("expected applied status, got %#v", result)
+	}
+
+	target := filepath.Join(dir, "coastline.mp4")
+	if _, err := os.Stat(analysisCachePath(source)); !os.IsNotExist(err) {
+		t.Fatalf("expected old analysis cache path to be gone, stat err=%v", err)
+	}
+	data, err := os.ReadFile(analysisCachePath(target))
+	if err != nil {
+		t.Fatalf("expected renamed analysis cache: %v", err)
+	}
+	var cache analysisCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		t.Fatal(err)
+	}
+	if cache.SourcePath != target {
+		t.Fatalf("expected cache source path %q, got %q", target, cache.SourcePath)
+	}
+	if cache.OriginalFileName != filepath.Base(target) {
+		t.Fatalf("expected cache filename %q, got %q", filepath.Base(target), cache.OriginalFileName)
+	}
+
+	loaded := Item{
+		SourcePath:       target,
+		OriginalFileName: filepath.Base(target),
+		Extension:        ".mp4",
+		ShotAt:           item.ShotAt,
+		DurationSeconds:  item.DurationSeconds,
+	}
+	if warnings := applyAnalysisCache(&loaded); len(warnings) > 0 {
+		t.Fatalf("expected renamed cache to load, got warnings: %#v", warnings)
+	}
+	if loaded.Content == nil || loaded.Content.SceneSummary != item.Content.SceneSummary {
+		t.Fatalf("expected cached analysis after rename, got %#v", loaded.Content)
+	}
+}
+
 func TestApplyOneRefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "source.mp4")
@@ -120,6 +185,9 @@ func TestApplyOneMovesIntoGroupFolder(t *testing.T) {
 	if err := os.WriteFile(source+analysisCacheSuffix, []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(source+analysisCacheSuffix+".real", []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	server := &webServer{
 		report: Report{
@@ -155,6 +223,9 @@ func TestApplyOneMovesIntoGroupFolder(t *testing.T) {
 	}
 	if _, err := os.Stat(target + analysisCacheSuffix); err != nil {
 		t.Fatalf("expected analysis cache sidecar to move: %v", err)
+	}
+	if _, err := os.Stat(target + analysisCacheSuffix + ".real"); err != nil {
+		t.Fatalf("expected real analysis cache sidecar to move: %v", err)
 	}
 	item := server.report.Items[0]
 	if item.SourcePath != target {
@@ -341,17 +412,21 @@ func TestHandleUndoOrganizeMovesFilesBack(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	item := Item{
+		SourcePath:       source,
+		MediaType:        mediaTypeVideo,
+		OriginalFileName: filepath.Base(source),
+		Extension:        ".mp4",
+		Tags:             []string{"food", "cafe"},
+		FinalFileName:    "clip.mp4",
+		Content:          &ContentInfo{SceneSummary: "A cafe table with local food."},
+	}
+	if err := saveAnalysisCache(item); err != nil {
+		t.Fatal(err)
+	}
+
 	server := &webServer{
-		report: Report{
-			Items: []Item{{
-				SourcePath:       source,
-				MediaType:        mediaTypeVideo,
-				OriginalFileName: filepath.Base(source),
-				Extension:        ".mp4",
-				Tags:             []string{"food", "cafe"},
-				FinalFileName:    "clip.mp4",
-			}},
-		},
+		report: Report{Items: []Item{item}},
 	}
 
 	body, err := json.Marshal(organizeRequest{Root: groupRoot, SourcePaths: []string{source}})
@@ -367,6 +442,9 @@ func TestHandleUndoOrganizeMovesFilesBack(t *testing.T) {
 	target := filepath.Join(groupRoot, "food", "clip.mp4")
 	if _, err := os.Stat(target); err != nil {
 		t.Fatalf("expected organized file: %v", err)
+	}
+	if _, err := os.Stat(analysisCachePath(target)); err != nil {
+		t.Fatalf("expected organized analysis cache: %v", err)
 	}
 	var organizePayload organizeResponse
 	if err := json.Unmarshal(organizeResponseRecorder.Body.Bytes(), &organizePayload); err != nil {
@@ -387,6 +465,12 @@ func TestHandleUndoOrganizeMovesFilesBack(t *testing.T) {
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatalf("expected organized target removed, stat err=%v", err)
+	}
+	if _, err := os.Stat(analysisCachePath(source)); err != nil {
+		t.Fatalf("expected analysis cache restored by undo: %v", err)
+	}
+	if _, err := os.Stat(analysisCachePath(target)); !os.IsNotExist(err) {
+		t.Fatalf("expected organized cache path removed by undo, stat err=%v", err)
 	}
 	var undoPayload undoOrganizeResponse
 	if err := json.Unmarshal(undoResponseRecorder.Body.Bytes(), &undoPayload); err != nil {

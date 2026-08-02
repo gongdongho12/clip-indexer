@@ -489,6 +489,7 @@ Moved file:
 Apply panel에서 선택할 수 있습니다.
 
 - `Rename selected files`: 최종 파일명으로 rename 또는 move 합니다.
+- 미디어를 rename/move하면 `.clip-analysis.json` 분석 캐시도 같은 이름과 경로로 이동하며, undo 시 함께 복원됩니다.
 - `Write sidecar tag JSON`: `video.mp4.clip-tags.json`을 저장합니다.
 - `Write macOS xattr tags`: `com.clipatlas.tags` xattr에 메타데이터를 저장합니다.
 
