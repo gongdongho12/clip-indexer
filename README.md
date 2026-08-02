@@ -254,11 +254,13 @@ go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MED
 
 - 원본 파일명과 경로
 - 촬영 날짜
-- LLM 분석 상태
+- LLM 분석 상태와 파일별 실패 메시지
 - 추천 그룹 또는 계획된 폴더
 - 편집 가능한 태그
 - 편집 가능한 최종 파일명
 - Finder/Explorer에서 원본을 바로 선택하는 `Reveal` 버튼
+
+분석 및 파일 작업 로그는 `Tools > Console`에서 확인할 수 있습니다. 최근 200건을 보관하며, 분석 실패 시 파일 행과 상세 패널에서도 `Failed` 상태 및 오류 메시지를 표시합니다.
 
 오른쪽 패널에서 볼 수 있는 것:
 

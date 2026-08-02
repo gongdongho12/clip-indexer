@@ -266,7 +266,7 @@
 
     .tools-actions {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
       padding-bottom: 10px;
       border-bottom: 1px solid var(--line);
@@ -585,6 +585,12 @@
       border-color: #f1cf9d;
       background: #fff6e8;
       color: var(--warn);
+    }
+
+    .analysis-chip.fail {
+      border-color: #e9b8b4;
+      background: #fff0ef;
+      color: var(--bad);
     }
 
     .analysis-chip.idle {
@@ -1156,6 +1162,32 @@
       overflow: visible;
     }
 
+    .detail-error {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-left: 3px solid var(--bad);
+      background: #fff4f2;
+      color: var(--bad);
+      font-size: 12px;
+    }
+
+    .detail-error span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .detail-error button {
+      min-height: 26px;
+      padding: 0 8px;
+      color: var(--bad);
+      background: #ffffff;
+    }
+
     .analysis-status {
       grid-column: 1 / -1;
       grid-template-columns: minmax(180px, auto) minmax(140px, 1fr) auto;
@@ -1207,6 +1239,19 @@
       text-overflow: ellipsis;
       white-space: nowrap;
       font-size: 12px;
+    }
+
+    button.analysis-message {
+      min-height: 24px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      text-align: left;
+    }
+
+    button.analysis-message:hover {
+      text-decoration: underline;
     }
 
     .progress {
@@ -1431,27 +1476,131 @@
     .log {
       min-height: 32px;
       max-height: 32px;
+      width: 100%;
       overflow: hidden;
       padding: 7px 14px;
+      border: 0;
+      border-top: 1px solid var(--line);
+      border-radius: 0;
       color: var(--muted);
       font-size: 12px;
       background: #fbfcfc;
-      border-top: 1px solid var(--line);
-    }
-
-    .log div {
-      overflow: hidden;
-      overflow-wrap: anywhere;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .log div:not(:first-child) {
-      display: none;
+      text-align: left;
     }
 
     .log:empty {
       display: none;
+    }
+
+    .console-panel {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 60;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      width: min(760px, calc(100vw - 28px));
+      height: min(46vh, 430px);
+      border: 1px solid #31424c;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #101820;
+      color: #d8e2e7;
+      box-shadow: 0 18px 50px rgba(10, 18, 24, 0.32);
+    }
+
+    .console-panel[hidden] {
+      display: none;
+    }
+
+    .console-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 10px 9px 14px;
+      border-bottom: 1px solid #31424c;
+      background: #17232b;
+    }
+
+    .console-title {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .console-title h2 {
+      margin: 0;
+      color: #ffffff;
+      font-size: 14px;
+    }
+
+    .console-title span {
+      color: #91a3ad;
+      font-size: 11px;
+    }
+
+    .console-header button {
+      min-height: 28px;
+      padding: 0 9px;
+      border-color: #435660;
+      background: #1e2d36;
+      color: #e8f0f3;
+      font-size: 12px;
+    }
+
+    .console-output {
+      min-height: 0;
+      overflow: auto;
+      padding: 8px 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .console-entry {
+      display: grid;
+      grid-template-columns: auto auto minmax(0, 1fr);
+      gap: 10px;
+      padding: 5px 14px;
+      border-bottom: 1px solid rgba(145, 163, 173, 0.12);
+    }
+
+    .console-time {
+      color: #8396a1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .console-level {
+      width: 44px;
+      color: #9fb1ba;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .console-entry.fail .console-level,
+    .console-entry.fail .console-message {
+      color: #ff8a80;
+    }
+
+    .console-entry.warn .console-level {
+      color: #ffc36b;
+    }
+
+    .console-entry.ok .console-level {
+      color: #72d39b;
+    }
+
+    .console-message {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    .console-empty {
+      padding: 18px 14px;
+      color: #8396a1;
     }
 
     .ok {
@@ -1681,6 +1830,31 @@
         grid-row: 3;
       }
 
+      .detail-error {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      .detail-error strong {
+        grid-column: 1 / -1;
+      }
+
+      .console-panel {
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        height: min(56vh, 480px);
+        border-right: 0;
+        border-bottom: 0;
+        border-left: 0;
+        border-radius: 8px 8px 0 0;
+      }
+
+      .console-entry {
+        grid-template-columns: auto auto minmax(0, 1fr);
+        gap: 7px;
+        padding: 5px 10px;
+      }
+
       .ops {
         gap: 0;
         padding-bottom: env(safe-area-inset-bottom);
@@ -1821,6 +1995,7 @@
               <div class="tools-actions">
                 <button id="undoOrganize" type="button" title="Undo last organize (Cmd/Ctrl+Z)" disabled>Undo</button>
                 <button id="exportHtml" type="button" title="Export static HTML report">Export HTML</button>
+                <button id="showConsole" type="button" title="Open activity and error console">Console</button>
               </div>
               <div class="stats" id="stats" aria-label="Library statistics"></div>
             </div>
@@ -1913,7 +2088,7 @@
             <button class="danger" id="clearAnalysis">Clear selected analysis</button>
             <button class="primary" id="apply">Apply selected</button>
           </div>
-          <div class="log" id="log"></div>
+          <button class="log" id="log" type="button" title="Open activity console"></button>
         </section>
       </aside>
     </main>
@@ -1925,6 +2100,17 @@
     </div>
     <div class="modal-body" id="modalBody"></div>
   </div>
+  <section class="console-panel" id="consolePanel" aria-label="Activity console" hidden>
+    <header class="console-header">
+      <div class="console-title">
+        <h2>Activity console</h2>
+        <span id="consoleSummary">0 entries</span>
+      </div>
+      <button id="clearConsole" type="button">Clear</button>
+      <button id="closeConsole" type="button">Close</button>
+    </header>
+    <div class="console-output" id="consoleOutput" role="log" aria-live="polite"></div>
+  </section>
   <section class="map-page" id="tagMapPage" hidden>
     <header class="map-bar">
       <div class="map-title">
@@ -1963,7 +2149,9 @@
       folderPlan: null,
       undo: null,
       tagMapOpen: false,
-      workflowTab: "organize"
+      workflowTab: "organize",
+      logs: [],
+      logKeys: new Set()
     };
 
     const $ = (id) => document.getElementById(id);
@@ -2257,6 +2445,7 @@
       const response = await fetch("/api/report");
       const report = await readJSONResponse(response);
       state.report = report;
+      captureReportWarnings(report.warnings || []);
       if (state.report.options?.analysis_language) {
         state.analysisLanguage = state.report.options.analysis_language;
         $("analysisLanguage").value = state.analysisLanguage;
@@ -2298,15 +2487,23 @@
         const wasRunning = Boolean(state.analysisStatus?.running);
         const response = await fetch("/api/analysis-status");
         state.analysisStatus = await response.json();
+        captureAnalysisStatusLogs(state.analysisStatus);
         renderAnalysisStatus();
         renderRows();
+        renderDetail();
         renderUndoControls();
         if (wasRunning && !state.analysisStatus.running) {
           await loadReport();
           if (state.analysisStatus.error) {
             log(state.analysisStatus.error, "fail");
           } else {
-            log(`Automatic analysis finished: ${state.analysisStatus.updated || 0} updated`, state.analysisStatus.warnings?.length ? "warn" : "ok");
+            const failed = state.analysisStatus.failed_source_paths?.length || 0;
+            log(
+              failed
+                ? `Analysis finished: ${failed} failed, ${state.analysisStatus.updated || 0} updated`
+                : `Analysis finished: ${state.analysisStatus.updated || 0} updated`,
+              failed ? "fail" : state.analysisStatus.warnings?.length ? "warn" : "ok"
+            );
           }
         }
       } catch (error) {
@@ -2526,6 +2723,7 @@
         return;
       }
       const edit = getEdit(item);
+      const analysisFailure = analysisFailureFor(item);
       preview.innerHTML = previewMarkup(item);
       detail.innerHTML = `
         <div class="detail-header">
@@ -2541,6 +2739,13 @@
           ${summaryPill("Length", formatDuration(item.duration_seconds))}
           ${summaryPill("Group", formatGroup(item))}
         </div>
+        ${analysisFailure ? `
+          <div class="detail-error">
+            <strong>Analysis failed</strong>
+            <span title="${escapeAttr(analysisFailure)}">${escapeHtml(trimText(analysisFailure, 220))}</span>
+            <button data-open-console type="button">Console</button>
+          </div>
+        ` : ""}
         <div class="detail-tags">
           ${renderDetailTags(edit.tags)}
         </div>
@@ -2603,8 +2808,8 @@
         </div>
         <div class="progress${indeterminate ? " indeterminate" : ""}" role="progressbar" aria-label="Analysis progress" aria-valuemin="0" aria-valuemax="100" ${indeterminate ? 'aria-valuetext="Starting analysis"' : `aria-valuenow="${percent}"`}><span style="width:${Math.max(0, Math.min(100, percent))}%"></span></div>
         <strong class="analysis-percent">${indeterminate ? "Starting" : `${percent}%`}</strong>
-        ${status.error ? `<div class="analysis-message fail" title="${escapeAttr(status.error)}">${escapeHtml(trimText(status.error, 180))}</div>` : ""}
-        ${warningText ? `<div class="analysis-message warn" title="${escapeAttr(warningText)}">${escapeHtml(trimText(warningText, 180))}</div>` : ""}
+        ${status.error ? `<button class="analysis-message fail" data-open-console type="button" title="Open console: ${escapeAttr(status.error)}">${escapeHtml(trimText(status.error, 180))}</button>` : ""}
+        ${warningText ? `<button class="analysis-message warn" data-open-console type="button" title="Open console: ${escapeAttr(warningText)}">${escapeHtml(trimText(warningText, 180))}</button>` : ""}
       `;
       requestAnimationFrame(syncLayoutMetrics);
     }
@@ -2895,14 +3100,15 @@
       if (status.current_source_path === sourcePath) {
         return { label: "Analyzing", kind: "active", title: "LLM analysis is running for this file", current: true };
       }
+      const failure = analysisFailureFor(item);
+      if (failure) {
+        return { label: "Failed", kind: "fail", title: failure };
+      }
       if (item.content) {
         return { label: "Analyzed", kind: "done", title: "LLM content is available" };
       }
       if (item.location) {
         return { label: "GPS only", kind: "idle", title: "Location metadata exists, but no LLM scene analysis yet" };
-      }
-      if ((status.failed_source_paths || []).includes(sourcePath)) {
-        return { label: "Warning", kind: "warn", title: "Analysis finished with a warning" };
       }
       if ((status.completed_source_paths || []).includes(sourcePath)) {
         return { label: "Checked", kind: "done", title: "Analysis finished without adding content" };
@@ -2915,6 +3121,16 @@
         };
       }
       return { label: "Not analyzed", kind: "idle", title: "No LLM content yet" };
+    }
+
+    function analysisFailureFor(item) {
+      const status = state.analysisStatus || {};
+      const sourcePath = item?.source_path || "";
+      if (!(status.failed_source_paths || []).includes(sourcePath)) return "";
+      const fileName = baseName(sourcePath);
+      return (status.warnings || []).find((warning) =>
+        warning.includes(sourcePath) || (fileName && warning.includes(fileName))
+      ) || status.error || "The latest analysis attempt did not produce a result.";
     }
 
     function selectedOperations() {
@@ -3259,14 +3475,11 @@
         const nextActivePath = sourcePaths.includes(state.activePath) ? state.activePath : sourcePaths[0];
         applyReportPayload(payload, { clearUndo: true, nextActivePath });
         render();
-        loadAnalysisStatus();
-        log(`Analyzed ${payload.analyzed} file(s), updated ${payload.updated || 0}`, payload.warnings?.length ? "warn" : "ok");
-        if (payload.warnings?.length) {
-          log(payload.warnings[0], "warn");
-        }
+        await loadAnalysisStatus();
         await refreshReportAfterMutation(nextActivePath);
       } catch (error) {
         log(error.message, "fail");
+        openConsole();
       } finally {
         setButtonsDisabled(buttonIds, false);
         renderUndoControls();
@@ -3445,11 +3658,89 @@
       $("previewModal").hidden = true;
     }
 
-    function log(message, kind = "") {
-      const line = document.createElement("div");
-      line.className = kind;
-      line.textContent = `${new Date().toLocaleTimeString()}  ${message}`;
-      $("log").prepend(line);
+    function log(message, kind = "", key = "") {
+      const text = String(message || "").trim();
+      if (!text || (key && state.logKeys.has(key))) return;
+      if (key) state.logKeys.add(key);
+      state.logs.unshift({
+        time: new Date(),
+        kind: kind || "info",
+        message: text
+      });
+      if (state.logs.length > 200) state.logs.length = 200;
+      renderConsole();
+    }
+
+    function captureReportWarnings(warnings) {
+      for (const warning of warnings || []) {
+        if (state.logs.some((entry) => entry.message === warning)) continue;
+        const kind = /failed|error|rejected|returned http|could not/i.test(warning) ? "fail" : "warn";
+        log(warning, kind, `report:${warning}`);
+      }
+    }
+
+    function captureAnalysisStatusLogs(status) {
+      if (!status) return;
+      const runKey = status.started_at || "current";
+      const failedPaths = status.failed_source_paths || [];
+      const consumedWarnings = new Set();
+      for (const sourcePath of failedPaths) {
+        const fileName = baseName(sourcePath);
+        const warning = (status.warnings || []).find((candidate) =>
+          candidate.includes(sourcePath) || (fileName && candidate.includes(fileName))
+        );
+        if (warning) consumedWarnings.add(warning);
+        log(
+          warning || `Analysis failed for ${sourcePath}`,
+          "fail",
+          `analysis:${runKey}:${sourcePath}:${warning || "failed"}`
+        );
+      }
+      for (const warning of status.warnings || []) {
+        if (consumedWarnings.has(warning)) continue;
+        log(warning, "warn", `analysis:${runKey}:warning:${warning}`);
+      }
+      if (status.error) {
+        log(status.error, "fail", `analysis:${runKey}:error:${status.error}`);
+      }
+    }
+
+    function renderConsole() {
+      const latest = state.logs[0];
+      const compact = $("log");
+      compact.className = `log ${latest?.kind || ""}`.trim();
+      compact.textContent = latest
+        ? `${latest.time.toLocaleTimeString()}  ${latest.message}`
+        : "";
+
+      const failures = state.logs.filter((entry) => entry.kind === "fail").length;
+      $("consoleSummary").textContent = failures
+        ? `${state.logs.length} entries · ${failures} errors`
+        : `${state.logs.length} entries`;
+      $("consoleOutput").innerHTML = state.logs.length
+        ? state.logs.map((entry) => `
+            <div class="console-entry ${escapeAttr(entry.kind)}">
+              <span class="console-time">${escapeHtml(entry.time.toLocaleTimeString())}</span>
+              <span class="console-level">${escapeHtml(entry.kind)}</span>
+              <span class="console-message">${escapeHtml(entry.message)}</span>
+            </div>
+          `).join("")
+        : '<div class="console-empty">No activity yet</div>';
+    }
+
+    function openConsole() {
+      closeToolsMenu();
+      renderConsole();
+      $("consolePanel").hidden = false;
+    }
+
+    function closeConsole() {
+      $("consolePanel").hidden = true;
+    }
+
+    function clearConsole() {
+      state.logs = [];
+      renderConsole();
     }
 
     function formatDate(value) {
@@ -3555,8 +3846,9 @@
     }
 
     function formatAnalysisStatus(item) {
-      if (!item?.content) return "Not analyzed";
       if (state.analysisStatus?.running && state.analysisStatus.current_source_path === item.source_path) return "Analyzing";
+      if (analysisFailureFor(item)) return "Failed";
+      if (!item?.content) return "Not analyzed";
       if (item.content.frame_count) return `${item.content.frame_count} frame(s)`;
       return "Analyzed";
     }
@@ -3635,6 +3927,10 @@
       closeToolsMenu();
       exportHtmlReport();
     });
+    $("showConsole").addEventListener("click", openConsole);
+    $("log").addEventListener("click", openConsole);
+    $("closeConsole").addEventListener("click", closeConsole);
+    $("clearConsole").addEventListener("click", clearConsole);
     $("analyze").addEventListener("click", analyzeSelected);
     $("analyzeAll").addEventListener("click", analyzeAll);
     $("clearAnalysis").addEventListener("click", clearSelectedAnalysis);
@@ -3653,6 +3949,10 @@
       if (event.target.id === "previewModal") closePreview();
     });
     document.addEventListener("click", (event) => {
+      if (event.target.closest("[data-open-console]")) {
+        openConsole();
+        return;
+      }
       const menu = $("toolsMenu");
       if (menu.open && !menu.contains(event.target)) closeToolsMenu();
     });
@@ -3660,7 +3960,9 @@
       handleGlobalShortcut(event);
       if (event.defaultPrevented) return;
       if (event.key !== "Escape") return;
-      if ($("toolsMenu").open) {
+      if (!$("consolePanel").hidden) {
+        closeConsole();
+      } else if ($("toolsMenu").open) {
         closeToolsMenu();
       } else if (state.tagMapOpen) {
         closeTagMap();
