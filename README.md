@@ -13,7 +13,7 @@
 
 ## 요구 사항
 
-- Go 1.26+
+- 소스에서 실행하거나 빌드할 때 Go 1.26+
 - FFmpeg 도구가 `PATH`에 있어야 합니다.
   - `ffprobe`: 영상 메타데이터 읽기
   - `ffmpeg`: LLM 분석용 프레임/오디오 추출
@@ -47,6 +47,33 @@ go run ./cmd/clip-indexer --pretty /Volumes/SD_Card/DCIM/100MEDIA
 
 ```bash
 go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MEDIA
+```
+
+개발 중에는 같은 포트를 유지하면서 Go 코드, 웹 UI, `.env.local` 변경을 자동 반영하는 `dev` 명령을 권장합니다.
+
+```bash
+go run ./cmd/clip-indexer dev --port 4318 --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MEDIA
+```
+
+DJI SD 카드 경로를 바로 여는 현재 예시:
+
+```bash
+go run ./cmd/clip-indexer dev --port 4318 --trip "DJI" /Volumes/SD_Card/DCIM/DJI_001/
+```
+
+종료할 때는 실행한 터미널에서 `Ctrl+C`를 누릅니다. `dev`는 재시작할 때 기존 자식 서버를 종료하고 같은 포트를 다시 사용합니다.
+
+### 릴리즈 바이너리 사용
+
+Go 도구 체인 없이 사용하려면 [최신 GitHub Release](https://github.com/gongdongho12/clip-indexer/releases/latest)에서 운영체제와 CPU에 맞는 아카이브를 받으면 됩니다. GitHub CLI가 설치되어 있는 macOS Apple Silicon 환경에서는 다음처럼 최신 바이너리를 받을 수 있습니다.
+
+```bash
+gh release download \
+  --repo gongdongho12/clip-indexer \
+  --pattern 'clip-indexer_*_darwin_arm64.tar.gz'
+tar -xzf clip-indexer_*_darwin_arm64.tar.gz
+./clip-indexer --version
+./clip-indexer serve --port 4318 --trip "DJI" /Volumes/SD_Card/DCIM/DJI_001/
 ```
 
 ### 목업 샘플로 먼저 보기
@@ -136,6 +163,12 @@ go run ./cmd/clip-indexer --pretty ~/Movies/trip
 go run ./cmd/clip-indexer serve ~/Movies/trip
 ```
 
+`dev`는 로컬 웹 파일 매니저를 실행하고 소스와 환경변수 파일 변경 시 자동으로 재시작합니다. `--port 0`을 사용해도 첫 실행에서 고른 포트를 이후 재시작에 계속 사용합니다.
+
+```bash
+go run ./cmd/clip-indexer dev --port 4318 ~/Movies/trip
+```
+
 `export`는 서버 없이 열 수 있는 정적 HTML 리포트를 만듭니다. 폴더 목록, 파일 목록, 태그 맵, 선택 파일 상세를 `index.html`에서 확인할 수 있습니다.
 
 ```bash
@@ -194,7 +227,15 @@ go run ./cmd/clip-indexer export \
 
 ## 로컬 환경 변수
 
-API 키는 `.env.local`에 넣으면 됩니다. 이 파일은 git에 올라가지 않습니다.
+API 키는 저장소 루트의 `.env.local`에 넣으면 됩니다. 이 파일은 git에 올라가지 않습니다. Gemini만 설정해도 모든 분석 기능이 동작하며 DeepSeek는 필수가 아닙니다.
+
+| 입력/작업 | Gemini만 설정 | Gemini + DeepSeek |
+| --- | --- | --- |
+| 이미지와 영상 프레임 | Gemini | Gemini |
+| 오디오와 음성 | Gemini | Gemini |
+| 텍스트 보강과 폴더 계획 | Gemini | DeepSeek 우선, 실패 시 Gemini |
+
+먼저 Gemini 구성만 넣어 서비스를 실행한 뒤 텍스트 처리 비용을 줄이고 싶을 때 DeepSeek를 추가하면 됩니다.
 
 Gemini만 사용하는 기본 구성:
 
@@ -213,10 +254,11 @@ CLIP_INDEXER_VISION_INPUT_MODE=auto
 DEEPSEEK_API_KEY=...
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
-LLM_PROVIDER_MODE=fallback
 ```
 
 `DEEPSEEK_API_KEY`가 추가되면 텍스트 요청만 DeepSeek를 먼저 호출하고 실패하면 Gemini로 전환합니다. 이미지/영상과 오디오는 계속 Gemini가 직접 처리합니다. `LLM_PROVIDER_MODE`를 생략해도 Gemini와 DeepSeek가 함께 설정되어 있으면 텍스트 fallback 모드가 자동으로 선택됩니다.
+
+강제로 한 공급자만 사용해야 할 때만 `.env.local`에 `LLM_PROVIDER_MODE=direct`를 지정합니다. API 키나 전체 `.env.local` 내용은 로그, 이슈, 커밋에 포함하지 않습니다.
 
 `CLIP_INDEXER_VISION_INPUT_MODE`는 `auto`, `native`, `local`을 지원합니다. `auto`는 설정된 provider 중 이미지 입력이 가능한 provider를 선택하며, 현재 예시에서는 Gemini가 선택됩니다. `native`는 OpenAI 호환 `image_url` 메시지를 강제로 사용하고, `local`만 Apple Vision 전처리를 강제합니다. `LLM_PROVIDER_MODE=direct`는 텍스트 요청에서 기본 provider만 호출하고, `fallback`은 실패 시 기존 `LLM_*` provider로 재시도합니다. 명시적인 fallback은 `LLM_FALLBACK_API_KEY`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_MODEL`로 지정할 수 있습니다.
 
@@ -277,9 +319,9 @@ go run ./cmd/clip-indexer serve --trip "Japan 2026" /Volumes/SD_Card/DCIM/100MED
 
 오른쪽 패널에서 볼 수 있는 것:
 
-- 고정된 영상 preview/detail 패널
+- 스크롤과 분리된 고정 미디어 preview
 - 선택한 클립 메타데이터
-- 분석 진행 상태
+- 분석 진행률과 파일별 상태
 - apply 컨트롤
 - JSON panel
 - 로그
@@ -320,7 +362,7 @@ go run ./cmd/clip-indexer serve \
 
 `--auto-analyze-max-items 0`은 pending 파일 전체를 분석합니다. vision/audio 분석은 API 비용이 들 수 있고, 샘플링된 프레임/오디오가 설정한 LLM provider로 전송됩니다.
 
-분석 중에는 터미널에도 progress bar가 표시됩니다.
+분석 중에는 웹 UI 상단 progress bar와 파일 행의 상태가 실시간으로 갱신되며, 터미널에도 진행 상황이 표시됩니다. 실패한 요청은 파일 행과 상세 패널에 오류로 표시되고 `Tools > Console`에서 전체 메시지를 확인할 수 있습니다.
 
 ## 분석 캐시
 
@@ -449,7 +491,7 @@ Clip Atlas에는 두 가지 정리 방식이 있습니다.
 LLM 폴더 플래닝:
 
 1. 파일을 선택하거나 `All files`를 누릅니다.
-2. `Group destination folder`에 이동 대상 루트 폴더를 입력합니다.
+2. 필요하면 `Group destination folder`에 이동 대상 루트 폴더를 입력합니다. 비워두면 선택 파일의 공통 부모 아래 `clip-atlas-organized`를 자동으로 제안합니다.
 3. `Load folders`를 눌러 기존 하위 폴더 목록을 불러옵니다.
 4. `Plan folders`를 누릅니다.
 5. 계획된 folder chip과 row의 group/folder 표시를 확인합니다.
@@ -564,7 +606,7 @@ Sidecar JSON에 포함되는 값:
     "scene_summary": "A traveler is using a train ticket machine.",
     "location_guess": "Kansai International Airport, Japan",
     "tags": ["ticket_machine", "train", "japan"],
-    "model": "gemini-3.1-flash-lite"
+    "model": "gemini-3.6-flash"
   },
   "group": {
     "key": "train",
@@ -592,11 +634,13 @@ go test ./...
 GOCACHE=/private/tmp/clip-indexer-gocache go test ./...
 ```
 
-고정 포트로 웹 UI 실행:
+고정 포트와 자동 재시작으로 웹 UI 실행:
 
 ```bash
-go run ./cmd/clip-indexer serve --port 52993 /Volumes/SD_Card/DCIM/100MEDIA
+go run ./cmd/clip-indexer dev --port 4318 /Volumes/SD_Card/DCIM/100MEDIA
 ```
+
+`cmd/`, `internal/`, `go.mod`, `go.sum`, `.env`, `.env.local`이 바뀌면 서버가 자동으로 재시작됩니다. API 키를 바꾼 경우에도 `dev` 부모 프로세스를 다시 실행할 필요가 없습니다.
 
 ## 릴리즈
 
