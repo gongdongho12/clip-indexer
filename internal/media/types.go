@@ -26,7 +26,15 @@ type Config struct {
 	LLMBaseURL                  string
 	LLMAPIKey                   string
 	LLMModel                    string
+	LLMFallback                 LLMProviderConfig
+	LLMProviderMode             string
 	LLMTimeoutSeconds           int
+}
+
+type LLMProviderConfig struct {
+	BaseURL string
+	APIKey  string
+	Model   string
 }
 
 type Report struct {
@@ -62,6 +70,7 @@ type ReportOptions struct {
 	LLM                         bool   `json:"llm"`
 	LLMVision                   bool   `json:"llm_vision"`
 	LLMAudio                    bool   `json:"llm_audio"`
+	LLMProviderMode             string `json:"llm_provider_mode,omitempty"`
 	AutoAnalyze                 bool   `json:"auto_analyze"`
 	AutoAnalyzeMaxItems         int    `json:"auto_analyze_max_items,omitempty"`
 	AnalysisLanguage            string `json:"analysis_language,omitempty"`

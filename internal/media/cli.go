@@ -141,6 +141,13 @@ func addIndexFlags(fs *flag.FlagSet, cfg *Config) {
 		return nil
 	})
 	fs.StringVar(&cfg.LLMModel, "llm-model", cfg.LLMModel, "LLM model name")
+	fs.StringVar(&cfg.LLMFallback.BaseURL, "llm-fallback-base-url", cfg.LLMFallback.BaseURL, "fallback LLM API base URL")
+	fs.Func("llm-fallback-api-key", "fallback LLM API key", func(value string) error {
+		cfg.LLMFallback.APIKey = value
+		return nil
+	})
+	fs.StringVar(&cfg.LLMFallback.Model, "llm-fallback-model", cfg.LLMFallback.Model, "fallback LLM model name")
+	fs.StringVar(&cfg.LLMProviderMode, "llm-provider-mode", cfg.LLMProviderMode, "LLM provider mode: direct or fallback")
 	fs.IntVar(&cfg.LLMTimeoutSeconds, "llm-timeout", cfg.LLMTimeoutSeconds, "LLM request timeout in seconds")
 }
 
@@ -168,6 +175,7 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 			LLM:                         cfg.UseLLM,
 			LLMVision:                   cfg.UseLLMVision,
 			LLMAudio:                    cfg.UseLLMAudio,
+			LLMProviderMode:             normalizeLLMProviderMode(cfg.LLMProviderMode),
 			AutoAnalyze:                 cfg.AutoAnalyze,
 			AutoAnalyzeMaxItems:         cfg.AutoAnalyzeMaxItems,
 			VisionAdaptive:              cfg.VisionAdaptive,
@@ -225,6 +233,9 @@ func validateConfig(cfg Config) error {
 	if normalizeAnalysisLanguage(cfg.AnalysisLanguage) == "" {
 		return errors.New("--analysis-language must be one of auto, ko, en, zh, ja")
 	}
+	if normalizeLLMProviderMode(cfg.LLMProviderMode) == "" {
+		return errors.New("--llm-provider-mode must be direct or fallback")
+	}
 	if cfg.UseLLMVision || cfg.UseLLMAudio {
 		cfg.UseLLM = true
 	}
@@ -261,6 +272,9 @@ func validateConfig(cfg Config) error {
 		}
 		if isOpenAIHosted(cfg.LLMBaseURL) && strings.TrimSpace(cfg.LLMAPIKey) == "" {
 			return errors.New("--llm or --llm-vision with the default OpenAI-compatible base URL requires --llm-api-key or LLM_API_KEY/OPENAI_API_KEY")
+		}
+		if normalizeLLMProviderMode(cfg.LLMProviderMode) == "fallback" && !llmProviderConfigured(cfg.LLMFallback) {
+			return errors.New("--llm-provider-mode=fallback requires a fallback base URL and model")
 		}
 	}
 	return nil
@@ -317,6 +331,27 @@ func analysisItemCount(limit int, itemCount int) int {
 }
 
 func defaultConfig() Config {
+	primary := LLMProviderConfig{
+		BaseURL: envOrAny("https://api.openai.com/v1", "LLM_BASE_URL", "OPENAI_BASE_URL"),
+		APIKey:  envOrAny("", "LLM_API_KEY", "OPENAI_API_KEY"),
+		Model:   envOrAny("", "LLM_MODEL", "OPENAI_MODEL"),
+	}
+	fallback := LLMProviderConfig{
+		BaseURL: envOr("LLM_FALLBACK_BASE_URL", ""),
+		APIKey:  envOr("LLM_FALLBACK_API_KEY", ""),
+		Model:   envOr("LLM_FALLBACK_MODEL", ""),
+	}
+	if deepSeekKey := envOr("DEEPSEEK_API_KEY", ""); deepSeekKey != "" {
+		if fallback.Model == "" {
+			fallback = primary
+		}
+		primary = LLMProviderConfig{
+			BaseURL: envOr("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+			APIKey:  deepSeekKey,
+			Model:   envOr("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+		}
+	}
+
 	return Config{
 		FFProbePath:                 envOr("FFPROBE_PATH", "ffprobe"),
 		FFMpegPath:                  envOr("FFMPEG_PATH", "ffmpeg"),
@@ -334,9 +369,11 @@ func defaultConfig() Config {
 		AudioMaxSeconds:             envIntOr("CLIP_INDEXER_AUDIO_MAX_SECONDS", 45),
 		AudioMaxItems:               envIntOr("CLIP_INDEXER_AUDIO_MAX_ITEMS", 12),
 		AudioModel:                  envOrAny("whisper-1", "LLM_AUDIO_MODEL", "OPENAI_AUDIO_MODEL"),
-		LLMBaseURL:                  envOrAny("https://api.openai.com/v1", "LLM_BASE_URL", "OPENAI_BASE_URL"),
-		LLMAPIKey:                   envOrAny("", "LLM_API_KEY", "OPENAI_API_KEY"),
-		LLMModel:                    envOrAny("", "LLM_MODEL", "OPENAI_MODEL"),
+		LLMBaseURL:                  primary.BaseURL,
+		LLMAPIKey:                   primary.APIKey,
+		LLMModel:                    primary.Model,
+		LLMFallback:                 fallback,
+		LLMProviderMode:             envOr("LLM_PROVIDER_MODE", "direct"),
 		LLMTimeoutSeconds:           30,
 	}
 }
@@ -384,9 +421,21 @@ func isOpenAIHosted(baseURL string) bool {
 	return normalized == "" || strings.Contains(normalized, "api.openai.com")
 }
 
+func normalizeLLMProviderMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "direct", "primary", "primary-only", "primary_only":
+		return "direct"
+	case "fallback", "failover":
+		return "fallback"
+	default:
+		return ""
+	}
+}
+
 func supportsAudioTranscriptions(baseURL string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(baseURL))
-	return !strings.Contains(normalized, "generativelanguage.googleapis.com")
+	return !strings.Contains(normalized, "generativelanguage.googleapis.com") &&
+		!strings.Contains(normalized, "api.deepseek.com")
 }
 
 func summarize(items []Item, discovered int, reportWarnings int) Summary {

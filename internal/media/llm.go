@@ -48,6 +48,11 @@ type chatCompletionResponse struct {
 	} `json:"choices"`
 }
 
+type chatCompletionResult struct {
+	Content string
+	Model   string
+}
+
 func EnrichWithLLM(ctx context.Context, cfg Config, items []Item) []string {
 	var inputs []llmItemInput
 	for _, item := range items {
@@ -84,13 +89,13 @@ func EnrichWithLLM(ctx context.Context, cfg Config, items []Item) []string {
 		},
 		"temperature": 0.2,
 	}
-	content, err := callChatCompletion(ctx, cfg, requestBody)
+	result, err := callChatCompletion(ctx, cfg, requestBody)
 	if err != nil {
 		return []string{err.Error()}
 	}
 
 	var output llmOutput
-	if err := json.Unmarshal([]byte(content), &output); err != nil {
+	if err := json.Unmarshal([]byte(result.Content), &output); err != nil {
 		return []string{fmt.Sprintf("could not parse LLM JSON content: %v", err)}
 	}
 
@@ -112,7 +117,7 @@ func EnrichWithLLM(ctx context.Context, cfg Config, items []Item) []string {
 				LocationGuess:      strings.TrimSpace(suggestion.LocationGuess),
 				LocationConfidence: round(clamp01(suggestion.LocationConfidence), 2),
 				Tags:               mergeTagList(nil, suggestion.Tags),
-				Model:              cfg.LLMModel,
+				Model:              result.Model,
 				Notes:              strings.TrimSpace(suggestion.Notes),
 			}
 		}
@@ -143,45 +148,78 @@ func EnrichWithLLM(ctx context.Context, cfg Config, items []Item) []string {
 	return warnings
 }
 
-func callChatCompletion(ctx context.Context, cfg Config, requestBody map[string]any) (string, error) {
-	body, err := json.Marshal(requestBody)
-	if err != nil {
-		return "", fmt.Errorf("could not encode LLM request: %w", err)
+func callChatCompletion(ctx context.Context, cfg Config, requestBody map[string]any) (chatCompletionResult, error) {
+	primary := LLMProviderConfig{
+		BaseURL: cfg.LLMBaseURL,
+		APIKey:  cfg.LLMAPIKey,
+		Model:   cfg.LLMModel,
+	}
+	result, err := callChatCompletionProvider(ctx, primary, requestBody)
+	if err == nil {
+		return result, nil
+	}
+	if normalizeLLMProviderMode(cfg.LLMProviderMode) != "fallback" {
+		return chatCompletionResult{}, err
 	}
 
-	endpoint := strings.TrimRight(cfg.LLMBaseURL, "/")
+	fallback := cfg.LLMFallback
+	if !llmProviderConfigured(fallback) || sameLLMProvider(primary, fallback) {
+		return chatCompletionResult{}, err
+	}
+	fallbackResult, fallbackErr := callChatCompletionProvider(ctx, fallback, requestBody)
+	if fallbackErr != nil {
+		return chatCompletionResult{}, fmt.Errorf("primary LLM failed: %v; fallback LLM failed: %w", err, fallbackErr)
+	}
+	return fallbackResult, nil
+}
+
+func callChatCompletionProvider(ctx context.Context, provider LLMProviderConfig, requestBody map[string]any) (chatCompletionResult, error) {
+	providerRequest := make(map[string]any, len(requestBody)+1)
+	for key, value := range requestBody {
+		providerRequest[key] = value
+	}
+	providerRequest["model"] = provider.Model
+	if isDeepSeekHosted(provider.BaseURL) {
+		providerRequest["response_format"] = map[string]string{"type": "json_object"}
+	}
+	body, err := json.Marshal(providerRequest)
+	if err != nil {
+		return chatCompletionResult{}, fmt.Errorf("could not encode LLM request: %w", err)
+	}
+
+	endpoint := strings.TrimRight(provider.BaseURL, "/")
 	if !strings.HasSuffix(endpoint, "/chat/completions") {
 		endpoint += "/chat/completions"
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("could not create LLM request: %w", err)
+		return chatCompletionResult{}, fmt.Errorf("could not create LLM request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if cfg.LLMAPIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.LLMAPIKey)
+	if provider.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+provider.APIKey)
 	}
 
 	resp, err := llmHTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("LLM request failed: %w", err)
+		return chatCompletionResult{}, fmt.Errorf("LLM request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
-		return "", fmt.Errorf("could not read LLM response: %w", err)
+		return chatCompletionResult{}, fmt.Errorf("could not read LLM response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("LLM request returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+		return chatCompletionResult{}, llmHTTPError(provider, resp.StatusCode, responseBody)
 	}
 
 	var chatResponse chatCompletionResponse
 	if err := json.Unmarshal(responseBody, &chatResponse); err != nil {
-		return "", fmt.Errorf("could not parse LLM chat response: %w", err)
+		return chatCompletionResult{}, fmt.Errorf("could not parse LLM chat response: %w", err)
 	}
 	if len(chatResponse.Choices) == 0 {
-		return "", fmt.Errorf("LLM response had no choices")
+		return chatCompletionResult{}, fmt.Errorf("LLM response had no choices")
 	}
 
 	content := strings.TrimSpace(chatResponse.Choices[0].Message.Content)
@@ -189,7 +227,29 @@ func callChatCompletion(ctx context.Context, cfg Config, requestBody map[string]
 	content = strings.TrimPrefix(content, "```")
 	content = strings.TrimSuffix(content, "```")
 	content = strings.TrimSpace(content)
-	return content, nil
+	return chatCompletionResult{Content: content, Model: provider.Model}, nil
+}
+
+func llmProviderConfigured(provider LLMProviderConfig) bool {
+	return strings.TrimSpace(provider.BaseURL) != "" && strings.TrimSpace(provider.Model) != ""
+}
+
+func sameLLMProvider(left, right LLMProviderConfig) bool {
+	return strings.TrimRight(strings.TrimSpace(left.BaseURL), "/") == strings.TrimRight(strings.TrimSpace(right.BaseURL), "/") &&
+		strings.TrimSpace(left.Model) == strings.TrimSpace(right.Model)
+}
+
+func isDeepSeekHosted(baseURL string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(baseURL)), "api.deepseek.com")
+}
+
+func llmHTTPError(provider LLMProviderConfig, statusCode int, responseBody []byte) error {
+	detail := strings.TrimSpace(string(responseBody))
+	if isDeepSeekHosted(provider.BaseURL) && statusCode == http.StatusBadRequest &&
+		strings.Contains(detail, "unknown variant `image_url`") && strings.Contains(detail, "expected `text`") {
+		return fmt.Errorf("DeepSeek rejected image input (HTTP 400): the configured endpoint currently accepts text messages only")
+	}
+	return fmt.Errorf("LLM request returned HTTP %d: %s", statusCode, detail)
 }
 
 func mergeTagList(existing []string, incoming []string) []string {

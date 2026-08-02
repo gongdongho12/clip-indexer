@@ -68,28 +68,28 @@ func EnrichWithVision(ctx context.Context, cfg Config, items []Item) []string {
 		if !itemSupportsVision(items[index]) {
 			continue
 		}
-		output, frameCount, itemWarnings := analyzeItemWithVision(ctx, cfg, items[index])
+		output, frameCount, model, itemWarnings := analyzeItemWithVision(ctx, cfg, items[index])
 		warnings = append(warnings, itemWarnings...)
 		if output == nil {
 			analyzed++
 			continue
 		}
-		applyVisionOutput(&items[index], *output, frameCount, cfg.LLMModel)
+		applyVisionOutput(&items[index], *output, frameCount, model)
 		analyzed++
 	}
 	return warnings
 }
 
-func analyzeItemWithVision(ctx context.Context, cfg Config, item Item) (*visionItemOutput, int, []string) {
+func analyzeItemWithVision(ctx context.Context, cfg Config, item Item) (*visionItemOutput, int, string, []string) {
 	frames, cleanup, err := extractVisionFrames(ctx, cfg, item)
 	if cleanup != nil {
 		defer cleanup()
 	}
 	if err != nil {
-		return nil, 0, []string{fmt.Sprintf("vision frame extraction failed for %s: %v", item.SourcePath, err)}
+		return nil, 0, "", []string{fmt.Sprintf("vision frame extraction failed for %s: %v", item.SourcePath, err)}
 	}
 	if len(frames) == 0 {
-		return nil, 0, []string{fmt.Sprintf("no vision frames extracted for %s", item.SourcePath)}
+		return nil, 0, "", []string{fmt.Sprintf("no vision frames extracted for %s", item.SourcePath)}
 	}
 
 	input := visionItemInput{
@@ -105,7 +105,7 @@ func analyzeItemWithVision(ctx context.Context, cfg Config, item Item) (*visionI
 	}
 	metadata, err := json.Marshal(input)
 	if err != nil {
-		return nil, len(frames), []string{fmt.Sprintf("could not encode vision metadata for %s: %v", item.SourcePath, err)}
+		return nil, len(frames), "", []string{fmt.Sprintf("could not encode vision metadata for %s: %v", item.SourcePath, err)}
 	}
 
 	userContent := []map[string]any{
@@ -146,24 +146,24 @@ func analyzeItemWithVision(ctx context.Context, cfg Config, item Item) (*visionI
 		"temperature": 0.1,
 	}
 
-	content, err := callChatCompletion(ctx, cfg, requestBody)
+	result, err := callChatCompletion(ctx, cfg, requestBody)
 	if err != nil {
-		return nil, len(frames), append(warnings, fmt.Sprintf("vision LLM failed for %s: %v", item.SourcePath, err))
+		return nil, len(frames), "", append(warnings, fmt.Sprintf("vision LLM failed for %s: %v", item.SourcePath, err))
 	}
 
 	var output visionOutput
-	if err := json.Unmarshal([]byte(content), &output); err != nil {
-		return nil, len(frames), append(warnings, fmt.Sprintf("could not parse vision JSON for %s: %v", item.SourcePath, err))
+	if err := json.Unmarshal([]byte(result.Content), &output); err != nil {
+		return nil, len(frames), result.Model, append(warnings, fmt.Sprintf("could not parse vision JSON for %s: %v", item.SourcePath, err))
 	}
 	if len(output.Items) == 0 {
-		return nil, len(frames), append(warnings, fmt.Sprintf("vision response had no items for %s", item.SourcePath))
+		return nil, len(frames), result.Model, append(warnings, fmt.Sprintf("vision response had no items for %s", item.SourcePath))
 	}
 	for _, suggestion := range output.Items {
 		if suggestion.SourcePath == item.SourcePath {
-			return &suggestion, len(frames), warnings
+			return &suggestion, len(frames), result.Model, warnings
 		}
 	}
-	return &output.Items[0], len(frames), append(warnings, fmt.Sprintf("vision response did not echo source_path for %s", item.SourcePath))
+	return &output.Items[0], len(frames), result.Model, append(warnings, fmt.Sprintf("vision response did not echo source_path for %s", item.SourcePath))
 }
 
 func visionSystemPrompt(cfg Config) (string, []string) {

@@ -179,6 +179,10 @@ go run ./cmd/clip-indexer export \
 --llm-base-url               OpenAI 호환 API base URL
 --llm-api-key                LLM API 키
 --llm-model                  LLM 모델명
+--llm-provider-mode          direct 또는 fallback
+--llm-fallback-base-url      fallback LLM API base URL
+--llm-fallback-api-key       fallback LLM API 키
+--llm-fallback-model         fallback LLM 모델명
 --audio-model                오디오 transcription 모델명
 --auto-analyze               웹 UI 시작 시 자동 분석 실행
 --auto-analyze-max-items     자동 분석 최대 파일 수, 0이면 전체
@@ -187,6 +191,21 @@ go run ./cmd/clip-indexer export \
 ## 로컬 환경 변수
 
 API 키는 `.env.local`에 넣으면 됩니다. 이 파일은 git에 올라가지 않습니다.
+
+DeepSeek를 기본 provider로, Gemini를 fallback으로 쓰는 예시:
+
+```bash
+DEEPSEEK_API_KEY=...
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
+LLM_PROVIDER_MODE=direct
+
+LLM_API_KEY=...
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+LLM_MODEL=gemini-3.1-flash-lite
+```
+
+`DEEPSEEK_API_KEY`가 있으면 DeepSeek가 텍스트 및 vision 요청을 먼저 처리합니다. `LLM_PROVIDER_MODE=direct`는 DeepSeek만 호출하고, `fallback`은 실패 시 기존 `LLM_*` provider로 같은 요청을 재시도합니다. 실제 응답한 모델명은 분석 캐시에 기록합니다. 명시적인 fallback은 `LLM_FALLBACK_API_KEY`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_MODEL`로 지정할 수 있습니다.
 
 OpenAI 호환 예시:
 

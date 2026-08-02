@@ -135,13 +135,13 @@ func analyzeTranscriptWithLLM(ctx context.Context, cfg Config, item Item, transc
 		"temperature": 0.1,
 	}
 
-	content, err := callChatCompletion(ctx, cfg, requestBody)
+	result, err := callChatCompletion(ctx, cfg, requestBody)
 	if err != nil {
 		return nil, []string{fmt.Sprintf("audio LLM failed for %s: %v", item.SourcePath, err)}
 	}
 
 	var output audioOutput
-	if err := json.Unmarshal([]byte(content), &output); err != nil {
+	if err := json.Unmarshal([]byte(result.Content), &output); err != nil {
 		return nil, []string{fmt.Sprintf("could not parse audio JSON for %s: %v", item.SourcePath, err)}
 	}
 	if len(output.Items) == 0 {

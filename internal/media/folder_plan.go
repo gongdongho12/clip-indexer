@@ -150,12 +150,12 @@ func planFoldersWithLLM(ctx context.Context, cfg Config, items []Item, existingF
 		"temperature": 0.2,
 	}
 
-	content, err := callChatCompletion(ctx, cfg, requestBody)
+	result, err := callChatCompletion(ctx, cfg, requestBody)
 	if err != nil {
 		return folderPlanOutput{}, err
 	}
 	var output folderPlanOutput
-	if err := json.Unmarshal([]byte(content), &output); err != nil {
+	if err := json.Unmarshal([]byte(result.Content), &output); err != nil {
 		return folderPlanOutput{}, fmt.Errorf("could not parse folder plan JSON: %w", err)
 	}
 	return output, nil
