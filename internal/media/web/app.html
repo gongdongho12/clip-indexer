@@ -111,10 +111,10 @@
 
     .topbar {
       display: grid;
-      grid-template-columns: minmax(220px, 1fr) auto minmax(0, auto);
+      grid-template-columns: minmax(180px, 1fr) auto auto;
       gap: 14px;
       align-items: center;
-      padding: 14px 18px;
+      padding: 10px 18px;
       border-bottom: 1px solid var(--line);
       background: #ffffff;
       position: sticky;
@@ -171,13 +171,6 @@
       box-shadow: 0 0 0 1px #c9d7de;
     }
 
-    .stats {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: flex-end;
-    }
-
     .top-actions {
       display: flex;
       align-items: center;
@@ -188,7 +181,7 @@
 
     .top-action-buttons {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-items: center;
       justify-content: flex-end;
       gap: 8px;
@@ -216,17 +209,95 @@
       white-space: nowrap;
     }
 
-    .stat {
+    .tools-menu {
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .tools-menu summary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 0 12px;
       border: 1px solid var(--line);
       border-radius: 7px;
-      padding: 6px 9px;
-      background: #fafafa;
+      background: #ffffff;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      list-style: none;
+      white-space: nowrap;
+    }
+
+    .tools-menu summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .tools-menu summary::after {
+      content: "▾";
+      margin-left: 7px;
       color: var(--muted);
+      font-size: 11px;
+    }
+
+    .tools-menu[open] summary,
+    .tools-menu summary:hover {
+      border-color: var(--accent);
+    }
+
+    .tools-menu.has-warning summary {
+      color: var(--warn);
+    }
+
+    .tools-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      z-index: 30;
+      width: min(340px, calc(100vw - 24px));
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 14px 34px rgba(23, 32, 38, 0.16);
+    }
+
+    .tools-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .tools-actions button {
+      width: 100%;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 2px 14px;
+      padding-top: 8px;
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+      padding: 5px 4px;
+      color: var(--muted);
+      font-size: 12px;
     }
 
     .stat strong {
       color: var(--ink);
-      margin-right: 4px;
+      margin: 0;
+      order: 2;
     }
 
     .main {
@@ -1381,13 +1452,12 @@
       }
 
       .top-actions {
-        align-items: stretch;
-        flex-direction: column;
+        display: block;
       }
 
       .top-action-buttons {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         width: 100%;
       }
 
@@ -1399,22 +1469,17 @@
         width: 100%;
       }
 
-      .top-actions .primary {
+      .tools-menu,
+      .tools-menu summary {
         width: 100%;
       }
 
-      .stats {
-        flex-wrap: nowrap;
-        justify-content: flex-start;
-        overflow-x: auto;
-        padding-bottom: 1px;
+      .tools-popover {
+        right: 0;
       }
 
       .stat {
-        flex: 0 0 auto;
-        padding: 4px 7px;
-        font-size: 12px;
-        white-space: nowrap;
+        padding: 5px 3px;
       }
 
       .main {
@@ -1692,12 +1757,19 @@
               <option value="ja">日本語</option>
             </select>
           </label>
-          <button id="topAnalyzeSelected" type="button">Analyze selected</button>
-          <button class="primary" id="organizeFolder" type="button">Organize files</button>
-          <button id="undoOrganize" type="button" title="Undo last organize (Cmd/Ctrl+Z)" disabled>Undo</button>
-          <button id="exportHtml" type="button" title="Export static HTML report">Export HTML</button>
+          <button id="topAnalyzeSelected" type="button">Analyze</button>
+          <button class="primary" id="organizeFolder" type="button">Organize</button>
+          <details class="tools-menu" id="toolsMenu">
+            <summary id="toolsSummary">Tools</summary>
+            <div class="tools-popover">
+              <div class="tools-actions">
+                <button id="undoOrganize" type="button" title="Undo last organize (Cmd/Ctrl+Z)" disabled>Undo</button>
+                <button id="exportHtml" type="button" title="Export static HTML report">Export HTML</button>
+              </div>
+              <div class="stats" id="stats" aria-label="Library statistics"></div>
+            </div>
+          </details>
         </div>
-        <div class="stats" id="stats"></div>
       </div>
     </header>
 
@@ -2217,9 +2289,18 @@
       button.title = available ? "Undo last organize (Cmd/Ctrl+Z)" : "No organize operation to undo";
     }
 
+    function closeToolsMenu() {
+      $("toolsMenu").open = false;
+    }
+
     function renderStats() {
       const summary = state.report?.summary || {};
-      $("subtitle").textContent = state.report?.options?.trip ? state.report.options.trip : "Local media manager";
+      const files = summary.files_indexed || 0;
+      const analyzed = summary.with_content || 0;
+      const trip = state.report?.options?.trip || "Local media";
+      $("subtitle").textContent = `${trip} · ${files} files · ${analyzed} analyzed`;
+      $("toolsMenu").classList.toggle("has-warning", Boolean(summary.warnings));
+      $("toolsSummary").textContent = summary.warnings ? `Tools (${summary.warnings})` : "Tools";
       $("stats").innerHTML = [
         ["Files", summary.files_indexed || 0],
         ["Dates", summary.with_shot_date || 0],
@@ -2229,7 +2310,7 @@
         ["Place", summary.with_location || 0],
         ["Scene", summary.with_content || 0],
         ["Warnings", summary.warnings || 0]
-      ].map(([label, value]) => `<div class="stat"><strong>${value}</strong>${label}</div>`).join("");
+      ].map(([label, value]) => `<div class="stat"><span>${label}</span><strong>${value}</strong></div>`).join("");
     }
 
     function renderRows() {
@@ -2368,6 +2449,8 @@
       checkbox.title = selectText;
       $("selectEveryFile").textContent = total ? `All files (${selectedTotal}/${total})` : "All files";
       $("clearSelection").disabled = selectedTotal === 0;
+      $("topAnalyzeSelected").textContent = selectedTotal > 0 ? `Analyze (${selectedTotal})` : "Analyze";
+      $("organizeFolder").textContent = selectedTotal > 0 ? `Organize (${selectedTotal})` : "Organize";
       $("clearAnalysis").disabled = selectedTotal === 0 || Boolean(state.analysisStatus?.running);
       $("clearAnalysis").textContent = selectedTotal > 0
         ? `Clear analysis (${selectedTotal})`
@@ -3478,8 +3561,14 @@
     });
     $("topAnalyzeSelected").addEventListener("click", analyzeSelected);
     $("organizeFolder").addEventListener("click", organizeFolder);
-    $("undoOrganize").addEventListener("click", undoLastOrganize);
-    $("exportHtml").addEventListener("click", exportHtmlReport);
+    $("undoOrganize").addEventListener("click", () => {
+      closeToolsMenu();
+      undoLastOrganize();
+    });
+    $("exportHtml").addEventListener("click", () => {
+      closeToolsMenu();
+      exportHtmlReport();
+    });
     $("analyze").addEventListener("click", analyzeSelected);
     $("analyzeAll").addEventListener("click", analyzeAll);
     $("clearAnalysis").addEventListener("click", clearSelectedAnalysis);
@@ -3497,11 +3586,17 @@
     $("previewModal").addEventListener("click", (event) => {
       if (event.target.id === "previewModal") closePreview();
     });
+    document.addEventListener("click", (event) => {
+      const menu = $("toolsMenu");
+      if (menu.open && !menu.contains(event.target)) closeToolsMenu();
+    });
     window.addEventListener("keydown", (event) => {
       handleGlobalShortcut(event);
       if (event.defaultPrevented) return;
       if (event.key !== "Escape") return;
-      if (state.tagMapOpen) {
+      if ($("toolsMenu").open) {
+        closeToolsMenu();
+      } else if (state.tagMapOpen) {
         closeTagMap();
       } else {
         closePreview();
