@@ -20,6 +20,7 @@ type Config struct {
 	VisionSampleIntervalSeconds int
 	VisionMaxItems              int
 	VisionPromptFile            string
+	VisionInputMode             string
 	AudioMaxSeconds             int
 	AudioMaxItems               int
 	AudioModel                  string
@@ -79,6 +80,7 @@ type ReportOptions struct {
 	VisionSampleIntervalSeconds int    `json:"vision_sample_interval_seconds,omitempty"`
 	VisionMaxItems              int    `json:"vision_max_items,omitempty"`
 	VisionPromptFile            string `json:"vision_prompt_file,omitempty"`
+	VisionInputMode             string `json:"vision_input_mode,omitempty"`
 	AudioMaxSeconds             int    `json:"audio_max_seconds,omitempty"`
 	AudioMaxItems               int    `json:"audio_max_items,omitempty"`
 }

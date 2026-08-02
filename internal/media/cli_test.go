@@ -78,6 +78,23 @@ func TestNormalizeLLMProviderMode(t *testing.T) {
 	}
 }
 
+func TestNormalizeVisionInputMode(t *testing.T) {
+	tests := map[string]string{
+		"":             "auto",
+		"auto":         "auto",
+		"native":       "native",
+		"multimodal":   "native",
+		"local":        "local",
+		"apple-vision": "local",
+		"unknown":      "",
+	}
+	for input, want := range tests {
+		if got := normalizeVisionInputMode(input); got != want {
+			t.Fatalf("normalizeVisionInputMode(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestValidateConfigRequiresConfiguredFallback(t *testing.T) {
 	cfg := Config{
 		AnalysisLanguage: "auto",

@@ -17,6 +17,8 @@
 - FFmpeg 도구가 `PATH`에 있어야 합니다.
   - `ffprobe`: 영상 메타데이터 읽기
   - `ffmpeg`: LLM 분석용 프레임/오디오 추출
+- macOS에서 DeepSeek로 이미지/영상 분석 시 Swift 도구 체인이 필요합니다.
+  - `swiftc`: Apple Vision 프레임 분류/OCR helper를 최초 1회 빌드
 
 확인:
 
@@ -24,6 +26,7 @@
 go version
 ffprobe -version
 ffmpeg -version
+swiftc --version
 ```
 
 ## 빠른 시작
@@ -173,6 +176,7 @@ go run ./cmd/clip-indexer export \
 --vision-sample-interval     N초마다 vision frame을 샘플링, 0이면 --vision-frames 사용
 --vision-max-items           vision 분석 최대 파일 수, 0이면 전체
 --vision-prompt-file         vision 분석용 system prompt 파일
+--vision-input-mode          auto, native 또는 local 프레임 입력 방식
 --audio-max-seconds          오디오 샘플 길이
 --audio-max-items            audio 분석 최대 파일 수, 0이면 전체
 --overwrite                  기존 export 파일을 확인 없이 덮어쓰기
@@ -199,13 +203,16 @@ DEEPSEEK_API_KEY=...
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
 LLM_PROVIDER_MODE=direct
+CLIP_INDEXER_VISION_INPUT_MODE=auto
 
 LLM_API_KEY=...
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 LLM_MODEL=gemini-3.1-flash-lite
 ```
 
-`DEEPSEEK_API_KEY`가 있으면 DeepSeek가 텍스트 및 vision 요청을 먼저 처리합니다. `LLM_PROVIDER_MODE=direct`는 DeepSeek만 호출하고, `fallback`은 실패 시 기존 `LLM_*` provider로 같은 요청을 재시도합니다. 실제 응답한 모델명은 분석 캐시에 기록합니다. 명시적인 fallback은 `LLM_FALLBACK_API_KEY`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_MODEL`로 지정할 수 있습니다.
+`DEEPSEEK_API_KEY`가 있으면 DeepSeek가 기본 LLM이 됩니다. DeepSeek 공식 API가 이미지 메시지를 거부하므로 macOS의 기본 `auto` 모드는 Apple Vision으로 프레임 분류/OCR을 수행하고 그 관찰값을 DeepSeek가 태그, 요약, 파일명으로 정리합니다. API에는 원본 이미지가 아니라 텍스트 관찰값만 전송되며, 분석 모델에는 `deepseek-v4-flash + apple-vision`처럼 실제 경로가 기록됩니다.
+
+`CLIP_INDEXER_VISION_INPUT_MODE`는 `auto`, `native`, `local`을 지원합니다. `auto`는 공식 DeepSeek에 `local`, 이미지 입력을 지원하는 다른 provider에 `native`를 선택합니다. `native`는 OpenAI 호환 `image_url` 메시지를 강제로 사용하고, `local`은 Apple Vision 전처리를 강제합니다. `LLM_PROVIDER_MODE=direct`는 기본 provider만 호출하고, `fallback`은 실패 시 기존 `LLM_*` provider로 같은 요청을 재시도합니다. 명시적인 fallback은 `LLM_FALLBACK_API_KEY`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_MODEL`로 지정할 수 있습니다.
 
 OpenAI 호환 예시:
 

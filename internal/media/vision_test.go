@@ -57,6 +57,25 @@ func TestVisionFrameCountFallsBackToFixedFrames(t *testing.T) {
 	}
 }
 
+func TestResolvedVisionInputModeUsesLocalBridgeForDeepSeek(t *testing.T) {
+	cfg := Config{LLMBaseURL: "https://api.deepseek.com", VisionInputMode: "auto"}
+	if got := resolvedVisionInputMode(cfg); got != "local" {
+		t.Fatalf("resolvedVisionInputMode() = %q, want local", got)
+	}
+
+	cfg.VisionInputMode = "native"
+	if got := resolvedVisionInputMode(cfg); got != "native" {
+		t.Fatalf("explicit native mode = %q, want native", got)
+	}
+}
+
+func TestResolvedVisionInputModeKeepsMultimodalProvidersNative(t *testing.T) {
+	cfg := Config{LLMBaseURL: "https://example.com/v1", VisionInputMode: "auto"}
+	if got := resolvedVisionInputMode(cfg); got != "native" {
+		t.Fatalf("resolvedVisionInputMode() = %q, want native", got)
+	}
+}
+
 func TestClamp01(t *testing.T) {
 	if clamp01(-1) != 0 {
 		t.Fatal("negative should clamp to zero")

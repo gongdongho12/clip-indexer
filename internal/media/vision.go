@@ -21,6 +21,7 @@ const (
 
 type visionFrame struct {
 	Second float64
+	Path   string
 	Data   []byte
 }
 
@@ -108,47 +109,20 @@ func analyzeItemWithVision(ctx context.Context, cfg Config, item Item) (*visionI
 		return nil, len(frames), "", []string{fmt.Sprintf("could not encode vision metadata for %s: %v", item.SourcePath, err)}
 	}
 
-	userContent := []map[string]any{
-		{
-			"type": "text",
-			"text": "Analyze these sampled frames and metadata. Return JSON only.\n\n" + string(metadata),
-		},
-	}
-	for index, frame := range frames {
-		userContent = append(userContent, map[string]any{
-			"type": "text",
-			"text": fmt.Sprintf("Frame %d/%d at %.1fs", index+1, len(frames), frame.Second),
-		})
-		userContent = append(userContent, map[string]any{
-			"type": "image_url",
-			"image_url": map[string]any{
-				"url":    "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(frame.Data),
-				"detail": "low",
-			},
-		})
-	}
-
 	systemPrompt, promptWarning := visionSystemPrompt(cfg)
 	systemPrompt = strings.TrimSpace(systemPrompt + " " + analysisLanguageInstruction(cfg))
 	warnings := append([]string{}, promptWarning...)
-	requestBody := map[string]any{
-		"model": cfg.LLMModel,
-		"messages": []map[string]any{
-			{
-				"role":    "system",
-				"content": systemPrompt,
-			},
-			{
-				"role":    "user",
-				"content": userContent,
-			},
-		},
-		"temperature": 0.1,
+	requestBody, visionAdapter, err := buildVisionRequest(ctx, cfg, systemPrompt, metadata, frames)
+	if err != nil {
+		return nil, len(frames), "", append(warnings, fmt.Sprintf("vision preprocessing failed for %s: %v", item.SourcePath, err))
 	}
 
 	result, err := callChatCompletion(ctx, cfg, requestBody)
 	if err != nil {
 		return nil, len(frames), "", append(warnings, fmt.Sprintf("vision LLM failed for %s: %v", item.SourcePath, err))
+	}
+	if visionAdapter != "" {
+		result.Model = result.Model + " + " + visionAdapter
 	}
 
 	var output visionOutput
@@ -164,6 +138,76 @@ func analyzeItemWithVision(ctx context.Context, cfg Config, item Item) (*visionI
 		}
 	}
 	return &output.Items[0], len(frames), result.Model, append(warnings, fmt.Sprintf("vision response did not echo source_path for %s", item.SourcePath))
+}
+
+func buildVisionRequest(ctx context.Context, cfg Config, systemPrompt string, metadata []byte, frames []visionFrame) (map[string]any, string, error) {
+	if resolvedVisionInputMode(cfg) == "local" {
+		observations, err := describeFramesWithAppleVision(ctx, frames)
+		if err != nil {
+			return nil, "", err
+		}
+		payload, err := json.Marshal(struct {
+			Metadata     json.RawMessage          `json:"metadata"`
+			Observations []localVisionObservation `json:"frame_observations"`
+		}{
+			Metadata:     metadata,
+			Observations: observations,
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("could not encode local vision observations: %w", err)
+		}
+		return map[string]any{
+			"model": cfg.LLMModel,
+			"messages": []map[string]string{
+				{
+					"role":    "system",
+					"content": systemPrompt + " The image pixels were preprocessed locally. Frame classifications are uncertain hints, while recognized_text contains OCR visible in the frame. Reconcile evidence across frames, ignore weak or contradictory labels, and do not claim visual details unsupported by the observations.",
+				},
+				{
+					"role":    "user",
+					"content": "Analyze the metadata and local frame observations. Return JSON only.\n\n" + string(payload),
+				},
+			},
+			"temperature": 0.1,
+		}, "apple-vision", nil
+	}
+
+	userContent := []map[string]any{{
+		"type": "text",
+		"text": "Analyze these sampled frames and metadata. Return JSON only.\n\n" + string(metadata),
+	}}
+	for index, frame := range frames {
+		userContent = append(userContent, map[string]any{
+			"type": "text",
+			"text": fmt.Sprintf("Frame %d/%d at %.1fs", index+1, len(frames), frame.Second),
+		})
+		userContent = append(userContent, map[string]any{
+			"type": "image_url",
+			"image_url": map[string]any{
+				"url":    "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(frame.Data),
+				"detail": "low",
+			},
+		})
+	}
+	return map[string]any{
+		"model": cfg.LLMModel,
+		"messages": []map[string]any{
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": userContent},
+		},
+		"temperature": 0.1,
+	}, "", nil
+}
+
+func resolvedVisionInputMode(cfg Config) string {
+	mode := normalizeVisionInputMode(cfg.VisionInputMode)
+	if mode == "auto" && isDeepSeekHosted(cfg.LLMBaseURL) {
+		return "local"
+	}
+	if mode == "" || mode == "auto" {
+		return "native"
+	}
+	return mode
 }
 
 func visionSystemPrompt(cfg Config) (string, []string) {
@@ -255,7 +299,7 @@ func extractVisionFrames(ctx context.Context, cfg Config, item Item) ([]visionFr
 			cleanup()
 			return nil, nil, err
 		}
-		return []visionFrame{{Second: 0, Data: data}}, cleanup, nil
+		return []visionFrame{{Second: 0, Path: framePath, Data: data}}, cleanup, nil
 	}
 
 	count := visionFrameCount(item.DurationSeconds, cfg)
@@ -290,7 +334,7 @@ func extractVisionFrames(ctx context.Context, cfg Config, item Item) ([]visionFr
 			cleanup()
 			return nil, nil, err
 		}
-		frames = append(frames, visionFrame{Second: second, Data: data})
+		frames = append(frames, visionFrame{Second: second, Path: framePath, Data: data})
 	}
 	return frames, cleanup, nil
 }

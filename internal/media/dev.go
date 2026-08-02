@@ -81,6 +81,7 @@ func (r *devRunner) start() error {
 	r.cancel = cancel
 	cmdArgs := append([]string{"run", "./cmd/clip-indexer", "serve"}, r.serveArgs()...)
 	cmd := exec.CommandContext(ctx, "go", cmdArgs...)
+	configureDevChild(cmd)
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()
@@ -162,10 +163,10 @@ func (r *devRunner) stop() {
 		return
 	}
 	if r.child != nil && r.child.Process != nil {
-		_ = r.child.Process.Signal(os.Interrupt)
+		_ = interruptDevChild(r.child)
 	}
-	r.cancel()
 	if r.done == nil {
+		r.cancel()
 		r.cancel = nil
 		r.child = nil
 		return
@@ -173,11 +174,13 @@ func (r *devRunner) stop() {
 	select {
 	case <-r.done:
 	case <-time.After(2 * time.Second):
+		r.cancel()
 		if r.child != nil && r.child.Process != nil {
-			_ = r.child.Process.Kill()
+			_ = killDevChild(r.child)
 		}
 		<-r.done
 	}
+	r.cancel()
 	r.cancel = nil
 	r.child = nil
 }
@@ -250,7 +253,7 @@ func sourceSnapshot() (map[string]watchedFile, error) {
 
 func isWatchedSource(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".go", ".html", ".css", ".js", ".svg":
+	case ".go", ".swift", ".html", ".css", ".js", ".svg":
 		return true
 	default:
 		return false

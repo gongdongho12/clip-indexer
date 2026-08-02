@@ -1327,6 +1327,7 @@ func (s *webServer) analyzeSourcePath(ctx context.Context, cfg Config, sourcePat
 	s.report.Options.VisionSampleIntervalSeconds = cfg.VisionSampleIntervalSeconds
 	s.report.Options.VisionMaxItems = options.MaxItems
 	s.report.Options.VisionPromptFile = cfg.VisionPromptFile
+	s.report.Options.VisionInputMode = normalizeVisionInputMode(cfg.VisionInputMode)
 	s.report.Options.AudioMaxSeconds = cfg.AudioMaxSeconds
 	s.report.Options.AudioMaxItems = options.MaxItems
 	s.report.Warnings = append(s.report.Warnings, warnings...)

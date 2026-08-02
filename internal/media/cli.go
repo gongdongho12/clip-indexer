@@ -132,6 +132,7 @@ func addIndexFlags(fs *flag.FlagSet, cfg *Config) {
 	fs.IntVar(&cfg.VisionSampleIntervalSeconds, "vision-sample-interval", cfg.VisionSampleIntervalSeconds, "sample one vision frame about every N seconds; 0 uses adaptive duration sampling or --vision-frames")
 	fs.IntVar(&cfg.VisionMaxItems, "vision-max-items", cfg.VisionMaxItems, "maximum visual media files to analyze with --llm-vision; 0 means all")
 	fs.StringVar(&cfg.VisionPromptFile, "vision-prompt-file", cfg.VisionPromptFile, "path to a custom system prompt for --llm-vision")
+	fs.StringVar(&cfg.VisionInputMode, "vision-input-mode", cfg.VisionInputMode, "vision input mode: auto, native, or local")
 	fs.IntVar(&cfg.AudioMaxSeconds, "audio-max-seconds", cfg.AudioMaxSeconds, "maximum seconds of audio to transcribe per media file when --llm-audio is enabled")
 	fs.IntVar(&cfg.AudioMaxItems, "audio-max-items", cfg.AudioMaxItems, "maximum media files to analyze with --llm-audio; 0 means all")
 	fs.StringVar(&cfg.AudioModel, "audio-model", cfg.AudioModel, "audio transcription model name")
@@ -183,6 +184,7 @@ func BuildReport(ctx context.Context, cfg Config, inputs []string) (Report, erro
 			VisionSampleIntervalSeconds: cfg.VisionSampleIntervalSeconds,
 			VisionMaxItems:              cfg.VisionMaxItems,
 			VisionPromptFile:            cfg.VisionPromptFile,
+			VisionInputMode:             normalizeVisionInputMode(cfg.VisionInputMode),
 			AudioMaxSeconds:             cfg.AudioMaxSeconds,
 			AudioMaxItems:               cfg.AudioMaxItems,
 		},
@@ -240,6 +242,9 @@ func validateConfig(cfg Config) error {
 		cfg.UseLLM = true
 	}
 	if cfg.UseLLMVision {
+		if normalizeVisionInputMode(cfg.VisionInputMode) == "" {
+			return errors.New("--vision-input-mode must be auto, native, or local")
+		}
 		if cfg.VisionFrames < 1 {
 			return errors.New("--vision-frames must be at least 1")
 		}
@@ -366,6 +371,7 @@ func defaultConfig() Config {
 		VisionSampleIntervalSeconds: envIntOr("CLIP_INDEXER_VISION_SAMPLE_INTERVAL", 0),
 		VisionMaxItems:              envIntOr("CLIP_INDEXER_VISION_MAX_ITEMS", 12),
 		VisionPromptFile:            envOr("CLIP_INDEXER_VISION_PROMPT_FILE", ""),
+		VisionInputMode:             envOr("CLIP_INDEXER_VISION_INPUT_MODE", "auto"),
 		AudioMaxSeconds:             envIntOr("CLIP_INDEXER_AUDIO_MAX_SECONDS", 45),
 		AudioMaxItems:               envIntOr("CLIP_INDEXER_AUDIO_MAX_ITEMS", 12),
 		AudioModel:                  envOrAny("whisper-1", "LLM_AUDIO_MODEL", "OPENAI_AUDIO_MODEL"),
@@ -427,6 +433,19 @@ func normalizeLLMProviderMode(mode string) string {
 		return "direct"
 	case "fallback", "failover":
 		return "fallback"
+	default:
+		return ""
+	}
+}
+
+func normalizeVisionInputMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "auto":
+		return "auto"
+	case "native", "remote", "multimodal":
+		return "native"
+	case "local", "apple", "apple-vision", "apple_vision":
+		return "local"
 	default:
 		return ""
 	}
