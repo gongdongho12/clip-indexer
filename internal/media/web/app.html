@@ -23,7 +23,7 @@
       --tag-ink: #175647;
       --radius: 8px;
       --topbar-height: 65px;
-      --right-panel-width: clamp(420px, 30vw, 480px);
+      --right-panel-width: clamp(500px, 32vw, 600px);
     }
 
     * {
@@ -187,8 +187,10 @@
     }
 
     .top-action-buttons {
-      display: inline-flex;
+      display: flex;
+      flex-wrap: wrap;
       align-items: center;
+      justify-content: flex-end;
       gap: 8px;
       min-width: 0;
     }
@@ -538,7 +540,7 @@
 
     .right {
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto auto;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
       gap: 0;
       background: #ffffff;
       position: fixed;
@@ -560,7 +562,7 @@
       background: #101820;
       display: grid;
       grid-template-rows: minmax(0, 1fr) auto;
-      height: clamp(230px, 34vh, 380px);
+      height: clamp(170px, 22vh, 260px);
       min-height: 0;
       overflow: hidden;
       border-bottom: 1px solid #1f3039;
@@ -603,7 +605,7 @@
     .preview-title {
       color: #eef5f7;
       font-weight: 700;
-      padding: 8px 12px 10px;
+      padding: 6px 12px 7px;
       background: #101820;
       max-width: 100%;
       overflow: hidden;
@@ -953,30 +955,127 @@
     }
 
     .detail {
-      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      max-height: 230px;
+      padding: 10px 14px;
       border-bottom: 1px solid var(--line);
       overflow-y: auto;
     }
 
     .detail h2 {
-      margin: 0 0 8px;
-      font-size: 16px;
+      margin: 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 15px;
       letter-spacing: 0;
     }
 
-    .meta-grid {
+    .detail-header {
       display: grid;
-      grid-template-columns: 110px 1fr;
-      gap: 6px 10px;
-      color: var(--muted);
-      font-size: 13px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      min-width: 0;
     }
 
-    .meta-grid strong {
+    .detail-path {
+      color: var(--muted);
+      margin-top: 3px;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .media-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e9f3f5;
+      color: var(--accent-strong);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .detail-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      flex: 0 0 auto;
+      gap: 6px;
+    }
+
+    .summary-pill {
+      min-width: 0;
+      padding: 5px 7px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fbfdfd;
+    }
+
+    .summary-pill span,
+    .insight-label {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .summary-pill strong {
+      display: block;
+      min-width: 0;
       color: var(--ink);
+      font-size: 13px;
+      font-weight: 760;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .detail-insights {
+      display: grid;
+      flex: 1 1 auto;
+      gap: 6px;
+      min-height: 0;
+    }
+
+    .insight-line {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .insight-value {
       font-weight: 650;
       min-width: 0;
-      overflow-wrap: anywhere;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+    }
+
+    .detail-tags {
+      display: flex;
+      flex-wrap: wrap;
+      flex: 0 0 auto;
+      gap: 5px;
+      max-height: 52px;
+      min-height: 24px;
+      overflow-x: hidden;
+      overflow-y: auto;
     }
 
     .analysis-status {
@@ -1024,10 +1123,24 @@
     }
 
     .ops {
-      padding: 14px;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 0;
       border-bottom: 1px solid var(--line);
       display: grid;
-      gap: 12px;
+      align-content: start;
+      gap: 0;
+    }
+
+    .ops-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
     }
 
     .ops h2 {
@@ -1036,9 +1149,37 @@
       letter-spacing: 0;
     }
 
-    .ops-row {
+    .selection-summary {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .ops-section {
       display: grid;
       gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .ops-section-title {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .ops-switches {
+      display: grid;
+      gap: 8px;
+    }
+
+    .ops .switch {
+      min-height: 30px;
+      color: var(--ink);
+      font-size: 13px;
     }
 
     .ops-actions {
@@ -1055,7 +1196,19 @@
       grid-column: 1 / -1;
     }
 
+    .final-actions {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+      padding: 10px 14px;
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+      background: #ffffff;
+      box-shadow: 0 -8px 18px rgba(23, 32, 38, 0.06);
+    }
+
     .ops > .danger {
+      margin: 12px 14px 14px;
       width: 100%;
     }
 
@@ -1185,6 +1338,20 @@
         flex-direction: column;
       }
 
+      .top-action-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+      }
+
+      .language-control {
+        grid-column: 1 / -1;
+      }
+
+      .top-action-buttons button {
+        width: 100%;
+      }
+
       .top-actions .primary {
         width: 100%;
       }
@@ -1299,6 +1466,7 @@
 
       .detail {
         padding: 10px 12px;
+        gap: 8px;
       }
 
       .detail h2 {
@@ -1309,7 +1477,34 @@
         white-space: nowrap;
       }
 
-      .detail .meta-grid {
+      .detail-path {
+        display: none;
+      }
+
+      .media-pill {
+        min-height: 22px;
+        font-size: 11px;
+      }
+
+      .detail-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .summary-pill {
+        padding: 6px 7px;
+      }
+
+      .summary-pill span,
+      .insight-label {
+        font-size: 10px;
+      }
+
+      .summary-pill strong,
+      .insight-line {
+        font-size: 12px;
+      }
+
+      .detail-insights {
         display: none;
       }
 
@@ -1320,12 +1515,14 @@
 
       .ops {
         gap: 8px;
-        padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+        padding-bottom: calc(10px + env(safe-area-inset-bottom));
         border-bottom: 0;
       }
 
-      .ops h2 {
-        display: none;
+      .ops-header,
+      .ops-section,
+      .final-actions {
+        padding: 10px 12px;
       }
 
       .ops .switch {
@@ -1490,21 +1687,39 @@
         <section class="detail" id="detail"></section>
         <section class="analysis-status" id="analysisStatus" hidden></section>
         <section class="ops">
-          <h2>Apply</h2>
-          <label class="switch"><input id="renameFiles" type="checkbox"> Rename selected files</label>
-          <label class="switch"><input id="moveGroups" type="checkbox"> Move into group folders</label>
-          <input id="groupRoot" type="text" placeholder="Group destination folder">
-          <div class="folder-actions">
-            <button id="loadFolders">Load folders</button>
-            <button id="planFolders">Plan folders</button>
+          <div class="ops-header">
+            <h2>Workflow</h2>
+            <span class="selection-summary" id="selectionSummary">0 selected</span>
           </div>
-          <div class="folder-list" id="folderList" hidden></div>
-          <div class="folder-plan" id="folderPlan" hidden></div>
-          <label class="switch"><input id="writeSidecar" type="checkbox"> Write sidecar tag JSON</label>
-          <label class="switch"><input id="writeXattr" type="checkbox"> Write macOS xattr tags</label>
-          <div class="ops-actions">
-            <button id="analyze">Analyze selected</button>
-            <button id="analyzeAll">Analyze all</button>
+          <div class="ops-section">
+            <div class="ops-section-title">Analyze</div>
+            <div class="ops-actions">
+              <button id="analyze">Analyze selected</button>
+              <button id="analyzeAll">Analyze all</button>
+            </div>
+          </div>
+          <div class="ops-section">
+            <div class="ops-section-title">Organize</div>
+            <div class="ops-switches">
+              <label class="switch"><input id="renameFiles" type="checkbox"> Rename selected files</label>
+              <label class="switch"><input id="moveGroups" type="checkbox"> Move into group folders</label>
+            </div>
+            <input id="groupRoot" type="text" placeholder="Destination folder (optional)">
+            <div class="folder-actions">
+              <button id="loadFolders">Load folders</button>
+              <button id="planFolders">Plan folders</button>
+            </div>
+            <div class="folder-list" id="folderList" hidden></div>
+            <div class="folder-plan" id="folderPlan" hidden></div>
+          </div>
+          <div class="ops-section">
+            <div class="ops-section-title">Write</div>
+            <div class="ops-switches">
+              <label class="switch"><input id="writeSidecar" type="checkbox"> Write sidecar tag JSON</label>
+              <label class="switch"><input id="writeXattr" type="checkbox"> Write macOS xattr tags</label>
+            </div>
+          </div>
+          <div class="ops-actions final-actions">
             <button class="danger" id="clearAnalysis">Clear selected analysis</button>
             <button class="primary" id="apply">Apply selected</button>
           </div>
@@ -2086,6 +2301,9 @@
       $("clearAnalysis").textContent = selectedTotal > 0
         ? `Clear analysis (${selectedTotal})`
         : "Clear selected analysis";
+      $("selectionSummary").textContent = total
+        ? `${selectedTotal}/${total} selected`
+        : "0 files";
     }
 
     function renderDetail() {
@@ -2100,21 +2318,29 @@
       const edit = getEdit(item);
       preview.innerHTML = previewMarkup(item);
       detail.innerHTML = `
-        <h2>${escapeHtml(baseName(item.source_path))}</h2>
-        <div class="meta-grid">
-          <span>Media</span><strong>${escapeHtml(formatMediaType(item))}</strong>
-          <span>Final</span><strong>${escapeHtml(edit.final_file_name)}</strong>
-          <span>Shot</span><strong>${escapeHtml(formatDate(item.shot_at))}</strong>
-          <span>Duration</span><strong>${escapeHtml(formatDuration(item.duration_seconds))}</strong>
-          <span>Video</span><strong>${escapeHtml(formatVideo(item.video))}</strong>
-          <span>Audio</span><strong>${escapeHtml(formatAudio(item))}</strong>
-          <span>Location</span><strong>${escapeHtml(formatLocation(item.location, item.content))}</strong>
-          <span>Group</span><strong>${escapeHtml(formatGroup(item))}</strong>
-          <span>Scene</span><strong>${escapeHtml(formatScene(item.content))}</strong>
-          <span>Audio clue</span><strong>${escapeHtml(formatAudioInsight(item.content))}</strong>
-          <span>Transcript</span><strong>${escapeHtml(formatTranscript(item.content))}</strong>
-          <span>Analysis</span><strong>${escapeHtml(formatAnalysis(item))}</strong>
-          <span>Tags</span><strong>${edit.tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join(" ")}</strong>
+        <div class="detail-header">
+          <div>
+            <h2 title="${escapeAttr(item.source_path)}">${escapeHtml(baseName(item.source_path))}</h2>
+            <div class="detail-path">${escapeHtml(dirName(item.source_path) || item.source_path)}</div>
+          </div>
+          <span class="media-pill">${escapeHtml(formatMediaType(item))}</span>
+        </div>
+        <div class="detail-summary">
+          ${summaryPill("Status", formatAnalysisStatus(item))}
+          ${summaryPill("Shot", formatDate(item.shot_at))}
+          ${summaryPill("Length", formatDuration(item.duration_seconds))}
+          ${summaryPill("Group", formatGroup(item))}
+        </div>
+        <div class="detail-tags">
+          ${renderDetailTags(edit.tags)}
+        </div>
+        <div class="detail-insights">
+          ${detailInsight("Media", formatMediaSummary(item))}
+          ${detailInsight("Final", edit.final_file_name)}
+          ${detailInsight("Location", formatLocation(item.location, item.content))}
+          ${detailInsight("Scene", formatScene(item.content))}
+          ${detailInsight("Audio clue", formatAudioInsight(item.content))}
+          ${detailInsight("Transcript", formatTranscript(item.content))}
         </div>
       `;
     }
@@ -3063,6 +3289,35 @@
       return trimText(text, 220);
     }
 
+    function isEmptyDisplayValue(value) {
+      return String(value ?? "").trim() === "" || String(value).trim() === "-";
+    }
+
+    function summaryPill(label, value) {
+      const displayValue = isEmptyDisplayValue(value) ? "-" : value;
+      return `
+        <div class="summary-pill">
+          <span>${escapeHtml(label)}</span>
+          <strong title="${escapeAttr(displayValue)}">${escapeHtml(displayValue)}</strong>
+        </div>
+      `;
+    }
+
+    function detailInsight(label, value) {
+      if (isEmptyDisplayValue(value)) return "";
+      return `
+        <div class="insight-line">
+          <span class="insight-label">${escapeHtml(label)}</span>
+          <div class="insight-value">${escapeHtml(value)}</div>
+        </div>
+      `;
+    }
+
+    function renderDetailTags(tags) {
+      if (!tags?.length) return `<span class="tag">no tags</span>`;
+      return tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("");
+    }
+
     function formatAnalysis(item) {
       if (!item?.content) return "Not analyzed";
       const parts = [];
@@ -3071,6 +3326,22 @@
       if (item.content.model) parts.push(item.content.model);
       if (item.content.audio_model) parts.push(item.content.audio_model);
       return parts.length ? parts.join(" / ") : "Analyzed";
+    }
+
+    function formatAnalysisStatus(item) {
+      if (!item?.content) return "Not analyzed";
+      if (state.analysisStatus?.running && state.analysisStatus.active_path === item.source_path) return "Analyzing";
+      if (item.content.frame_count) return `${item.content.frame_count} frame(s)`;
+      return "Analyzed";
+    }
+
+    function formatMediaSummary(item) {
+      const parts = [];
+      const video = formatVideo(item.video);
+      const audio = formatAudio(item);
+      if (!isEmptyDisplayValue(video)) parts.push(video);
+      if (!isEmptyDisplayValue(audio)) parts.push(audio);
+      return parts.join(" / ") || "-";
     }
 
     function formatGroup(item) {
