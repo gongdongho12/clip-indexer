@@ -4,6 +4,23 @@ All notable changes to **Clip Atlas** are documented in this file.
 
 ## 2026-08-02
 
+Built from `42b6dbfde9cc`. **2** commit(s) processed.
+Changes since `v0.1.5`.
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`45a8452138`)
+
+### Other changes
+- Fix DeepSeek vision and dev restarts (`42b6dbfde9`)
+
+### 🔍 Analysis & Classification
+
+The following changes affect media analysis and classification (`internal/media/group.go`, `internal/media/vision.go`):
+
+- Fix DeepSeek vision and dev restarts
+
+## 2026-08-02
+
 Built from `398d364bc95e`. **2** commit(s) processed.
 Changes since `v0.1.5`.
 
