@@ -4,6 +4,17 @@ All notable changes to **Clip Atlas** are documented in this file.
 
 ## 2026-08-02
 
+Built from `081894120f55`. **2** commit(s) processed.
+Changes since `v0.1.5`.
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`bba5f92049`)
+
+### Other changes
+- Keep analysis caches aligned with renamed media (`081894120f`)
+
+## 2026-08-02
+
 Built from `c49307a24de1`. **2** commit(s) processed.
 Changes since `v0.1.5`.
 
