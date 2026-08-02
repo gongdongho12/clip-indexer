@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestApplyOneRenamesAndWritesSidecar(t *testing.T) {
@@ -835,5 +836,18 @@ func TestManualAnalysisStatusTracksCurrentAndCompletion(t *testing.T) {
 	}
 	if !slices.Contains(status.CompletedSourcePaths, sourcePaths[0]) {
 		t.Fatalf("expected completed source path, got %#v", status.CompletedSourcePaths)
+	}
+}
+
+func TestClientIdleShutdownWaitsForRunningAnalysis(t *testing.T) {
+	server := &webServer{lastClient: time.Now().Add(-time.Minute)}
+	server.startAnalysisStatus([]string{"/tmp/source.mp4"})
+	if server.shouldShutdownForClientIdle(20 * time.Second) {
+		t.Fatal("server should stay alive while analysis is running")
+	}
+
+	server.finishAnalysisStatus("")
+	if !server.shouldShutdownForClientIdle(20 * time.Second) {
+		t.Fatal("server should shut down after analysis when the client remains idle")
 	}
 }

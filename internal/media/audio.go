@@ -3,6 +3,7 @@ package media
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,6 +36,11 @@ type audioOutput struct {
 	Items []audioItemOutput `json:"items"`
 }
 
+type geminiAudioOutput struct {
+	Transcript string            `json:"transcript"`
+	Items      []audioItemOutput `json:"items"`
+}
+
 type audioItemOutput struct {
 	SourcePath         string   `json:"source_path"`
 	Tags               []string `json:"tags,omitempty"`
@@ -48,6 +54,11 @@ type audioItemOutput struct {
 }
 
 func EnrichWithAudio(ctx context.Context, cfg Config, items []Item) []string {
+	var supported bool
+	cfg, supported = configForAudioAnalysis(cfg)
+	if !supported {
+		return []string{"audio analysis skipped: no configured provider accepts audio input"}
+	}
 	var warnings []string
 	limit := len(items)
 	if cfg.AudioMaxItems > 0 && cfg.AudioMaxItems < limit {
@@ -69,7 +80,7 @@ func EnrichWithAudio(ctx context.Context, cfg Config, items []Item) []string {
 			ensureContent(&items[index])
 			items[index].Content.AudioTranscript = transcript
 			items[index].Content.AudioSeconds = seconds
-			items[index].Content.AudioModel = cfg.AudioModel
+			items[index].Content.AudioModel = audioAnalysisModel(cfg)
 			items[index].Tags = mergeTagList(items[index].Tags, []string{"speech"})
 		}
 		if output != nil {
@@ -88,6 +99,9 @@ func analyzeItemWithAudio(ctx context.Context, cfg Config, item Item) (*audioIte
 	if err != nil {
 		return nil, "", 0, []string{fmt.Sprintf("audio extraction failed for %s: %v", item.SourcePath, err)}
 	}
+	if isGeminiHosted(cfg.LLMBaseURL) {
+		return analyzeItemWithGeminiAudio(ctx, cfg, item, audioPath, seconds)
+	}
 
 	transcript, err := callAudioTranscription(ctx, cfg, audioPath)
 	if err != nil {
@@ -100,6 +114,79 @@ func analyzeItemWithAudio(ctx context.Context, cfg Config, item Item) (*audioIte
 
 	output, warnings := analyzeTranscriptWithLLM(ctx, cfg, item, transcript)
 	return output, transcript, seconds, warnings
+}
+
+func analyzeItemWithGeminiAudio(ctx context.Context, cfg Config, item Item, audioPath string, seconds int) (*audioItemOutput, string, int, []string) {
+	audioData, err := os.ReadFile(audioPath)
+	if err != nil {
+		return nil, "", seconds, []string{fmt.Sprintf("could not read audio sample for %s: %v", item.SourcePath, err)}
+	}
+	input := audioItemInput{
+		SourcePath:          item.SourcePath,
+		OriginalFileName:    item.OriginalFileName,
+		ShotAt:              item.ShotAt,
+		DurationSeconds:     item.DurationSeconds,
+		Audio:               item.Audio,
+		Location:            item.Location,
+		Content:             item.Content,
+		Tags:                item.Tags,
+		RecommendedFileName: item.RecommendedFileName,
+	}
+	metadata, err := json.Marshal(input)
+	if err != nil {
+		return nil, "", seconds, []string{fmt.Sprintf("could not encode audio metadata for %s: %v", item.SourcePath, err)}
+	}
+
+	requestBody := buildGeminiAudioRequest(cfg, metadata, audioData)
+	result, err := callChatCompletion(ctx, cfg, requestBody)
+	if err != nil {
+		return nil, "", seconds, []string{fmt.Sprintf("audio LLM failed for %s: %v", item.SourcePath, err)}
+	}
+
+	var output geminiAudioOutput
+	if err := json.Unmarshal([]byte(result.Content), &output); err != nil {
+		return nil, "", seconds, []string{fmt.Sprintf("could not parse audio JSON for %s: %v", item.SourcePath, err)}
+	}
+	transcript := strings.TrimSpace(output.Transcript)
+	if len(output.Items) == 0 {
+		return nil, transcript, seconds, []string{fmt.Sprintf("audio response had no items for %s", item.SourcePath)}
+	}
+	for _, suggestion := range output.Items {
+		if suggestion.SourcePath == item.SourcePath {
+			return &suggestion, transcript, seconds, nil
+		}
+	}
+	return &output.Items[0], transcript, seconds, []string{fmt.Sprintf("audio response did not echo source_path for %s", item.SourcePath)}
+}
+
+func buildGeminiAudioRequest(cfg Config, metadata []byte, audioData []byte) map[string]any {
+	return map[string]any{
+		"model": cfg.LLMModel,
+		"messages": []map[string]any{
+			{
+				"role":    "system",
+				"content": "You analyze travel media audio directly. Return only JSON: {\"transcript\":\"...\",\"items\":[{\"source_path\":\"...\",\"tags\":[\"...\"],\"audio_summary\":\"...\",\"location_guess\":\"...\",\"location_confidence\":0.0,\"location_label\":\"...\",\"suggested_slug\":\"...\",\"final_file_name\":\"...\",\"notes\":\"...\"}]}. Transcribe audible speech faithfully, identify language, announcements, music, ambience, transport sounds, business/place names, foods, activities, and travel context. Leave transcript empty when there is no speech. Be cautious with location guesses. " + analysisLanguageInstruction(cfg),
+			},
+			{
+				"role": "user",
+				"content": []map[string]any{
+					{
+						"type": "text",
+						"text": "Analyze this audio sample together with its media metadata. Keep source_path exact.\n\n" + string(metadata),
+					},
+					{
+						"type": "input_audio",
+						"input_audio": map[string]string{
+							"data":   base64.StdEncoding.EncodeToString(audioData),
+							"format": "wav",
+						},
+					},
+				},
+			},
+		},
+		"response_format": map[string]string{"type": "json_object"},
+		"temperature":     0.1,
+	}
 }
 
 func analyzeTranscriptWithLLM(ctx context.Context, cfg Config, item Item, transcript string) (*audioItemOutput, []string) {
@@ -160,7 +247,7 @@ func applyAudioOutput(item *Item, suggestion audioItemOutput, transcript string,
 	item.Content.AudioTranscript = transcript
 	item.Content.AudioSummary = strings.TrimSpace(suggestion.AudioSummary)
 	item.Content.AudioSeconds = seconds
-	item.Content.AudioModel = cfg.AudioModel
+	item.Content.AudioModel = audioAnalysisModel(cfg)
 	item.Content.AudioTags = mergeTagList(nil, suggestion.Tags)
 	if item.Content.LocationGuess == "" && suggestion.LocationGuess != "" {
 		item.Content.LocationGuess = strings.TrimSpace(suggestion.LocationGuess)
@@ -205,6 +292,13 @@ func applyAudioOutput(item *Item, suggestion audioItemOutput, transcript string,
 	if item.Content.AudioSummary != "" {
 		item.LLMNotes = strings.TrimSpace(strings.Join(nonEmpty(item.LLMNotes, item.Content.AudioSummary), "\n"))
 	}
+}
+
+func audioAnalysisModel(cfg Config) string {
+	if isGeminiHosted(cfg.LLMBaseURL) {
+		return cfg.LLMModel
+	}
+	return cfg.AudioModel
 }
 
 func extractAudioSample(ctx context.Context, cfg Config, item Item) (string, int, func(), error) {

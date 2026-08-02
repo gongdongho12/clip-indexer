@@ -17,8 +17,8 @@
 - FFmpeg 도구가 `PATH`에 있어야 합니다.
   - `ffprobe`: 영상 메타데이터 읽기
   - `ffmpeg`: LLM 분석용 프레임/오디오 추출
-- macOS에서 DeepSeek로 이미지/영상 분석 시 Swift 도구 체인이 필요합니다.
-  - `swiftc`: Apple Vision 프레임 분류/OCR helper를 최초 1회 빌드
+- 선택적인 macOS 로컬 vision 모드는 Swift 도구 체인이 필요합니다.
+  - `swiftc`: `--vision-input-mode=local` 사용 시 Apple Vision helper를 최초 1회 빌드
 
 확인:
 
@@ -202,17 +202,17 @@ DeepSeek를 기본 provider로, Gemini를 fallback으로 쓰는 예시:
 DEEPSEEK_API_KEY=...
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
-LLM_PROVIDER_MODE=direct
+LLM_PROVIDER_MODE=fallback
 CLIP_INDEXER_VISION_INPUT_MODE=auto
 
 LLM_API_KEY=...
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-LLM_MODEL=gemini-3.1-flash-lite
+LLM_MODEL=gemini-3.6-flash
 ```
 
-`DEEPSEEK_API_KEY`가 있으면 DeepSeek가 기본 LLM이 됩니다. DeepSeek 공식 API가 이미지 메시지를 거부하므로 macOS의 기본 `auto` 모드는 Apple Vision으로 프레임 분류/OCR을 수행하고 그 관찰값을 DeepSeek가 태그, 요약, 파일명으로 정리합니다. API에는 원본 이미지가 아니라 텍스트 관찰값만 전송되며, 분석 모델에는 `deepseek-v4-flash + apple-vision`처럼 실제 경로가 기록됩니다.
+`DEEPSEEK_API_KEY`가 있으면 DeepSeek가 텍스트 처리의 primary LLM이 됩니다. 위 구성에서 텍스트 요청은 DeepSeek를 먼저 호출하고 실패하면 Gemini로 전환합니다. 이미지/영상은 이미지 입력을 지원하는 Gemini를 바로 선택해 추출한 원본 프레임을 `image_url`로 전달하고, 오디오는 WAV 샘플을 Gemini의 `input_audio`로 직접 전달합니다. 따라서 시각 분석은 Apple Vision 분류값이 아니라 Gemini가 실제 프레임 픽셀을 보고 처리합니다.
 
-`CLIP_INDEXER_VISION_INPUT_MODE`는 `auto`, `native`, `local`을 지원합니다. `auto`는 공식 DeepSeek에 `local`, 이미지 입력을 지원하는 다른 provider에 `native`를 선택합니다. `native`는 OpenAI 호환 `image_url` 메시지를 강제로 사용하고, `local`은 Apple Vision 전처리를 강제합니다. `LLM_PROVIDER_MODE=direct`는 기본 provider만 호출하고, `fallback`은 실패 시 기존 `LLM_*` provider로 같은 요청을 재시도합니다. 명시적인 fallback은 `LLM_FALLBACK_API_KEY`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_MODEL`로 지정할 수 있습니다.
+`CLIP_INDEXER_VISION_INPUT_MODE`는 `auto`, `native`, `local`을 지원합니다. `auto`는 설정된 provider 중 이미지 입력이 가능한 provider를 선택하며, 현재 예시에서는 Gemini가 선택됩니다. `native`는 OpenAI 호환 `image_url` 메시지를 강제로 사용하고, `local`만 Apple Vision 전처리를 강제합니다. `LLM_PROVIDER_MODE=direct`는 텍스트 요청에서 기본 provider만 호출하고, `fallback`은 실패 시 기존 `LLM_*` provider로 재시도합니다. 명시적인 fallback은 `LLM_FALLBACK_API_KEY`, `LLM_FALLBACK_BASE_URL`, `LLM_FALLBACK_MODEL`로 지정할 수 있습니다.
 
 OpenAI 호환 예시:
 
@@ -236,10 +236,10 @@ Gemini를 Google의 OpenAI 호환 endpoint로 쓰는 예시:
 ```bash
 LLM_API_KEY=...
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-LLM_MODEL=gemini-3.1-flash-lite
+LLM_MODEL=gemini-3.6-flash
 ```
 
-현재 앱에서는 Gemini 호환 base URL일 때 vision 분석 경로를 사용합니다. Whisper 스타일의 `/audio/transcriptions` 경로는 Gemini 호환 base URL에서는 자동으로 건너뜁니다.
+Gemini 호환 base URL에서는 vision 프레임을 `image_url`, 오디오 샘플을 `input_audio`로 chat completion에 직접 전달합니다. Whisper 스타일의 `/audio/transcriptions`는 해당 endpoint를 제공하는 다른 provider에서만 사용합니다.
 
 ## 웹 UI 사용 흐름
 

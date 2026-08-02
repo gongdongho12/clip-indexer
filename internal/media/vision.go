@@ -54,6 +54,7 @@ type visionItemOutput struct {
 }
 
 func EnrichWithVision(ctx context.Context, cfg Config, items []Item) []string {
+	cfg = configForVisionAnalysis(cfg)
 	var warnings []string
 	limit := len(items)
 	if cfg.VisionMaxItems > 0 && cfg.VisionMaxItems < limit {

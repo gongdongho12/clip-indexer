@@ -408,12 +408,13 @@ func (s *webServer) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	s.markClientSeen()
 	defer r.Body.Close()
 
 	cfg := s.cfg
 	cfg.UseLLM = true
 	cfg.UseLLMVision = true
-	if supportsAudioTranscriptions(cfg.LLMBaseURL) {
+	if supportsConfiguredAudioAnalysis(cfg) {
 		cfg.UseLLMAudio = true
 	} else {
 		cfg.UseLLMAudio = false
@@ -973,7 +974,7 @@ func (s *webServer) analyzeForOrganization(ctx context.Context, sourcePaths []st
 	cfg := s.cfg
 	cfg.UseLLM = true
 	cfg.UseLLMVision = true
-	if supportsAudioTranscriptions(cfg.LLMBaseURL) {
+	if supportsConfiguredAudioAnalysis(cfg) {
 		cfg.UseLLMAudio = true
 	} else {
 		cfg.UseLLMAudio = false
@@ -1146,7 +1147,7 @@ func (s *webServer) runAutoAnalyze(ctx context.Context) {
 	cfg := s.cfg
 	cfg.UseLLM = true
 	cfg.UseLLMVision = true
-	if supportsAudioTranscriptions(cfg.LLMBaseURL) {
+	if supportsConfiguredAudioAnalysis(cfg) {
 		cfg.UseLLMAudio = true
 	} else {
 		cfg.UseLLMAudio = false
@@ -1751,10 +1752,7 @@ func (s *webServer) watchClientIdle(timeout time.Duration) {
 		case <-s.shutdown:
 			return
 		case <-ticker.C:
-			s.clientMu.Lock()
-			lastClient := s.lastClient
-			s.clientMu.Unlock()
-			if lastClient.IsZero() || time.Since(lastClient) < timeout {
+			if !s.shouldShutdownForClientIdle(timeout) {
 				continue
 			}
 			s.shutdownOnce.Do(func() {
@@ -1763,6 +1761,16 @@ func (s *webServer) watchClientIdle(timeout time.Duration) {
 			return
 		}
 	}
+}
+
+func (s *webServer) shouldShutdownForClientIdle(timeout time.Duration) bool {
+	if s.analysisIsRunning() {
+		return false
+	}
+	s.clientMu.Lock()
+	lastClient := s.lastClient
+	s.clientMu.Unlock()
+	return !lastClient.IsZero() && time.Since(lastClient) >= timeout
 }
 
 func (s *webServer) handleMedia(w http.ResponseWriter, r *http.Request) {

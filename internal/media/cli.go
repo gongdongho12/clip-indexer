@@ -28,11 +28,14 @@ func Run(args []string, stdout, stderr io.Writer) error {
 }
 
 func RunWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	// The dev parent must not retain file-backed values so each restarted child
+	// can load the latest .env.local contents.
+	if len(args) > 0 && args[0] == "dev" {
+		return runDev(args[1:], stdout, stderr)
+	}
 	envWarnings := loadEnvFiles(".env.local", ".env")
 	if len(args) > 0 {
 		switch args[0] {
-		case "dev":
-			return runDev(args[1:], stdout, stderr)
 		case "export":
 			return runExport(args[1:], stdin, stdout, stderr, envWarnings)
 		case "serve":
