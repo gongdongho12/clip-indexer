@@ -4,6 +4,24 @@ All notable changes to **Clip Atlas** are documented in this file.
 
 ## 2026-08-02
 
+Built from `a767e403f648`. **3** commit(s) processed.
+Changes since `v0.1.6`.
+
+### Documentation
+- update CHANGELOG.md [skip ci] (`107d58f881`)
+
+### Other changes
+- Make Gemini the standalone default provider (`a767e403f6`)
+- Route media analysis through Gemini 3.6 (`611a3ed137`)
+
+### 🔍 Analysis & Classification
+
+The following changes affect media analysis and classification (`internal/media/group.go`, `internal/media/vision.go`):
+
+- Route media analysis through Gemini 3.6
+
+## 2026-08-02
+
 Built from `42b6dbfde9cc`. **2** commit(s) processed.
 Changes since `v0.1.5`.
 
